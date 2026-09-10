@@ -30,6 +30,7 @@ explanatory text outside it. The schema constrains the shape to:
 ```json
 {
   "status": "completed | waiting_for_human | failed",
+  "title": "...",
   "summary": "...",
   "changed_files": ["..."],
   "question": "...",
@@ -56,3 +57,11 @@ information is needed" — state the concrete fact.
 `recommendation`/`recommended_option` are covered in full in the human-in-the-loop fragment
 below (only relevant on `waiting_for_human`); leave both unset when there is genuinely no
 defensible preference, and say why in `recommendation` rather than omitting it silently.
+
+`title` is a short, standalone headline for the change — the same register as a good commit
+subject line: imperative mood ("Add ...", "Fix ...", not "Added"/"Fixes"), under ~70
+characters, no trailing period, no restating "implement"/"fix"/the capability name (ksforge
+already prefixes that). It is placed verbatim into the pull request title and commit subject
+when `--create-pull-request` is set, so it must stand on its own without the rest of `summary`
+for context. Always set it on `completed` when you made changes; omit it for `review`/
+`explain` (nothing gets a PR) and for `waiting_for_human`/`failed`.

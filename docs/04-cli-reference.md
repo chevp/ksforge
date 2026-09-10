@@ -63,6 +63,7 @@ There is deliberately no `ksforge chat`, `ksforge agent`, or `ksforge ask`
   "pending_question": null,
   "result": {
     "success": true,
+    "title": "Add password reset via email",
     "summary": "Implemented password reset via email.",
     "changed_files": ["src/auth.rs", "src/password_reset.rs"],
     "validation": { "passed": true, "commands": [] }

@@ -292,6 +292,7 @@ mod tests {
         });
         exec.complete(ExecutionResult {
             success: true,
+            title: Some("Add OAuth2 authentication".into()),
             summary: "Implemented OAuth2 authentication.".into(),
             changed_files: vec!["src/auth.rs".into()],
             validation: ValidationOutcome::default(),

@@ -14,6 +14,15 @@ use super::executor::{AgentError, AgentResult};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentOutcome {
     pub status: OutcomeStatus,
+    /// Short, standalone headline for the change — used verbatim as the
+    /// pull request title and commit subject (see
+    /// `prompts/policies/validation-and-output.md` §22). `None` for
+    /// `review`/`explain` and non-`completed` statuses, which never open a
+    /// PR; `github::pull_request` falls back to a truncated `summary` when
+    /// a `completed` turn omits it anyway (section: never fully trust
+    /// model-reported facts, but degrade gracefully rather than fail).
+    #[serde(default)]
+    pub title: Option<String>,
     pub summary: String,
     #[serde(default)]
     pub changed_files: Vec<String>,
@@ -63,6 +72,7 @@ pub fn schema() -> Value {
                 "type": "string",
                 "enum": ["completed", "waiting_for_human", "failed"]
             },
+            "title": { "type": "string" },
             "summary": { "type": "string" },
             "changed_files": {
                 "type": "array",

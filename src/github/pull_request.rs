@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::domain::{Execution, ExecutionStatus, Result};
+use crate::domain::{Execution, ExecutionResult, ExecutionStatus, Result};
 
 use super::process::{run_gh, run_git};
 
@@ -43,11 +43,7 @@ pub async fn create_from_execution(
     )
     .await?;
 
-    let title = format!(
-        "[{}] {}",
-        execution.capability,
-        truncate(&result.summary, 60)
-    );
+    let title = pull_request_title(&execution.capability, result);
     let body = pr_body(execution);
     run_git(workspace_root, &["commit", "-m", &title, "-m", &body]).await?;
 
@@ -76,25 +72,44 @@ pub async fn create_from_execution(
     }))
 }
 
+/// Prefers the agent's own headline (`AgentOutcome::title`) — a clean,
+/// standalone commit-subject-style line — over a truncated `summary`
+/// sentence fragment; the latter only exists as a fallback for an older or
+/// non-compliant agent response (section: never fully trust model-reported
+/// facts, but degrade gracefully rather than fail).
+fn pull_request_title(capability: &str, result: &ExecutionResult) -> String {
+    let headline = result
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| truncate(&result.summary, 60));
+    format!("[{capability}] {headline}")
+}
+
 fn pr_body(execution: &Execution) -> String {
-    let result = execution.result.as_ref();
+    let validation = execution
+        .result
+        .as_ref()
+        .map(|r| {
+            if r.validation.commands.is_empty() {
+                "not configured"
+            } else if r.validation.passed {
+                "passed"
+            } else {
+                "failed"
+            }
+        })
+        .unwrap_or("not configured");
+    // One compact metadata line instead of three stacked "Key: value"
+    // lines — the story itself is the part worth reading, this footer is
+    // just provenance.
     format!(
-        "Story:\n\n{}\n\n---\nCapability: {}\nExecution: {}\n{}",
-        execution.user_story.text,
+        "## Story\n\n{}\n\n---\n`{}` · `{}` · validation: {validation}",
+        execution.user_story.text.trim(),
         execution.capability,
         execution.id,
-        result
-            .map(|r| format!(
-                "Validation: {}",
-                if r.validation.commands.is_empty() {
-                    "not configured".to_string()
-                } else if r.validation.passed {
-                    "passed".to_string()
-                } else {
-                    "failed".to_string()
-                }
-            ))
-            .unwrap_or_default(),
     )
 }
 
@@ -111,5 +126,61 @@ fn truncate(s: &str, max: usize) -> String {
         s.to_string()
     } else {
         format!("{}...", s.chars().take(max).collect::<String>())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{UserStory, ValidationOutcome};
+
+    fn result_with_title(title: Option<&str>) -> ExecutionResult {
+        ExecutionResult {
+            success: true,
+            title: title.map(String::from),
+            summary: "Added a '## User Stories einreichen' section to README, describing how to submit a story via the workflow.".into(),
+            changed_files: vec!["README.md".into()],
+            validation: ValidationOutcome::default(),
+            completed: Vec::new(),
+            open_items: Vec::new(),
+            recommendation: None,
+        }
+    }
+
+    #[test]
+    fn prefers_the_agents_own_title() {
+        let result = result_with_title(Some("Document user story submission in README"));
+        assert_eq!(
+            pull_request_title("implement", &result),
+            "[implement] Document user story submission in README"
+        );
+    }
+
+    #[test]
+    fn falls_back_to_a_truncated_summary_without_a_title() {
+        let result = result_with_title(None);
+        assert_eq!(
+            pull_request_title("implement", &result),
+            "[implement] Added a '## User Stories einreichen' section to README, desc..."
+        );
+    }
+
+    #[test]
+    fn falls_back_when_the_title_is_blank() {
+        let result = result_with_title(Some("   "));
+        assert!(pull_request_title("implement", &result).starts_with("[implement] Added a"));
+    }
+
+    #[test]
+    fn body_has_one_compact_metadata_line_not_three() {
+        let mut execution = Execution::start(
+            UserStory::from_text("As a user, I want X.").unwrap(),
+            "implement",
+        );
+        execution.complete(result_with_title(Some("Document user story submission")));
+
+        let body = pr_body(&execution);
+        assert!(body.starts_with("## Story\n\nAs a user, I want X.\n\n---\n"));
+        assert_eq!(body.lines().last().unwrap().matches('·').count(), 2);
     }
 }

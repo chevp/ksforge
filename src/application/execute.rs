@@ -171,6 +171,7 @@ pub(crate) async fn finish(
 
             execution.complete(ExecutionResult {
                 success: true,
+                title: outcome.title,
                 summary: outcome.summary,
                 changed_files: changed,
                 validation,

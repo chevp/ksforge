@@ -1,6 +1,6 @@
 [package]
 name = "ksforge"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 description = "Turns user stories into controlled, resumable Claude Code workflows (Kosmos ecosystem)"
 license = "MIT"

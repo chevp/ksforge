@@ -201,6 +201,11 @@ pub struct ValidationOutcome {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionResult {
     pub success: bool,
+    /// Short, standalone headline from the agent, for the pull request
+    /// title/commit subject — see `AgentOutcome::title`. `None` on
+    /// failure/cancellation, or when the agent omitted it.
+    #[serde(default)]
+    pub title: Option<String>,
     pub summary: String,
     pub changed_files: Vec<PathBuf>,
     pub validation: ValidationOutcome,
@@ -346,6 +351,7 @@ impl Execution {
         self.current_step = "failed".into();
         self.result = Some(ExecutionResult {
             success: false,
+            title: None,
             summary: detail,
             changed_files: self.artifacts.clone(),
             validation: ValidationOutcome::default(),
@@ -365,6 +371,7 @@ impl Execution {
         self.current_step = "cancelled".into();
         self.result = Some(ExecutionResult {
             success: false,
+            title: None,
             summary: reason,
             changed_files: self.artifacts.clone(),
             validation: ValidationOutcome::default(),

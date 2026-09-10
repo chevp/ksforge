@@ -48,6 +48,7 @@ constraining the final response to:
 ```json
 {
   "status": "completed | waiting_for_human | failed",
+  "title": "...",
   "summary": "...",
   "changed_files": ["..."],
   "question": "...",

@@ -126,7 +126,7 @@ the workspace (or its isolated dry-run copy) as the working directory.
   and any prompt that would still require a human is auto-denied rather
   than hanging the process.
 - **`--json-schema`**: constrains Claude Code's final turn to a flat
-  `{status, summary, changed_files?, question?, options?,
+  `{status, title?, summary, changed_files?, question?, options?,
   failure_reason?}` shape (`status` one of `completed` /
   `waiting_for_human` / `failed`) — see
   [06-human-in-the-loop.md](06-human-in-the-loop.md) for why this is the
