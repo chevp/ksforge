@@ -10,8 +10,9 @@ use crate::domain::{ExecutionId, Result, UserStory};
 /// act on, under `<workspace_root>/.ksforge/user-stories/` — the
 /// `.ksforge/<category>/` layout ksforge owns and that other future record
 /// types (e.g. ADRs) follow the same way. Each story gets a `US-<base62>`
-/// id, a markdown snapshot of the raw story text, and a JSON record tying
-/// the two together with the execution it started.
+/// id (exactly 6 base62 digits, e.g. `US-4gK2p0`), a markdown snapshot of
+/// the raw story text, and a JSON record tying the two together with the
+/// execution it started.
 ///
 /// The id is a base62-encoded random value (from a `Uuid::new_v4`), not a
 /// persisted counter. A shared counter file races the moment two `ksforge`
@@ -33,8 +34,12 @@ pub struct StoryRecord {
     pub created_at: DateTime<Utc>,
 }
 
-const BASE62_ALPHABET: &[u8] =
-    b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const BASE62_ALPHABET: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+/// Fixed width every generated id uses (section: short, stable, still
+/// collision-safe enough for a random id scoped to one workspace's
+/// `.ksforge/user-stories/` — see `new_id`).
+const ID_DIGITS: usize = 6;
 
 fn base62_encode(mut value: u128) -> String {
     if value == 0 {
@@ -49,8 +54,23 @@ fn base62_encode(mut value: u128) -> String {
     String::from_utf8(digits).expect("base62 alphabet is ASCII")
 }
 
+/// `base62_encode`, left-padded with `0` to exactly `width` characters —
+/// `new_id` needs every id the same length, not just the shortest
+/// representation of the underlying number.
+fn base62_encode_padded(value: u128, width: usize) -> String {
+    let mut encoded = base62_encode(value);
+    while encoded.len() < width {
+        encoded.insert(0, BASE62_ALPHABET[0] as char);
+    }
+    encoded
+}
+
 fn new_id() -> String {
-    format!("US-{}", base62_encode(Uuid::new_v4().as_u128()))
+    // Reduce the UUID's 128 random bits mod 62^ID_DIGITS instead of
+    // truncating its base62 representation — truncation would only ever
+    // vary the id's low-order digits, this uses all of them.
+    let random = Uuid::new_v4().as_u128() % 62u128.pow(ID_DIGITS as u32);
+    format!("US-{}", base62_encode_padded(random, ID_DIGITS))
 }
 
 impl StoryArchive {
@@ -104,7 +124,12 @@ mod tests {
             .record(&story_a, "implement", &ExecutionId::new())
             .unwrap();
         assert!(record_a.id.starts_with("US-"));
-        assert!(record_a.id["US-".len()..].chars().all(|c| c.is_ascii_alphanumeric()));
+        assert_eq!(record_a.id["US-".len()..].len(), ID_DIGITS);
+        assert!(
+            record_a.id["US-".len()..]
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric())
+        );
 
         let story_b = UserStory::from_text("As a user, I want story B.").unwrap();
         let record_b = archive

@@ -29,7 +29,9 @@ impl ClaudeCodeExecutor {
             return Err(AgentError::NotFound(path.display().to_string()));
         }
         match which::which("claude") {
-            Ok(path) => Ok(Self { claude_path: path }),
+            Ok(path) => Ok(Self {
+                claude_path: resolve_windows_shim(path),
+            }),
             Err(_) => Err(AgentError::NotFound("claude (not on PATH)".into())),
         }
     }
@@ -168,5 +170,69 @@ fn truncate(s: &str, max: usize) -> String {
         s.to_string()
     } else {
         format!("{}... [truncated]", &s[..max])
+    }
+}
+
+/// npm's global `claude` on Windows is a `.cmd` shim
+/// (`%dp0%\node_modules\@anthropic-ai\claude-code\bin\claude.exe %*`) that
+/// just forwards to a real `.exe` sitting next to it. Spawning the shim
+/// directly makes Windows re-invoke it through `cmd.exe`'s own batch-file
+/// argument parser, which mishandles a long, quote-heavy argument (ksforge's
+/// system prompt easily exceeds what it tolerates) and fails with "batch
+/// file arguments are invalid" — confirmed against a real global npm
+/// install. Resolving the real `.exe` and spawning it directly avoids
+/// `cmd.exe` entirely, the same workaround `tools/palau-test`'s
+/// `runClaudeAgent.ts` uses. A no-op on other platforms and for any other
+/// install layout (falls back to `path` unchanged), so an unusual setup
+/// still works, just without this optimization.
+#[cfg(windows)]
+fn resolve_windows_shim(path: PathBuf) -> PathBuf {
+    let Some(dir) = path.parent() else {
+        return path;
+    };
+    let exe = dir
+        .join("node_modules")
+        .join("@anthropic-ai")
+        .join("claude-code")
+        .join("bin")
+        .join("claude.exe");
+    if exe.is_file() { exe } else { path }
+}
+
+#[cfg(not(windows))]
+fn resolve_windows_shim(path: PathBuf) -> PathBuf {
+    path
+}
+
+#[cfg(all(test, windows))]
+mod windows_shim_tests {
+    use super::resolve_windows_shim;
+
+    #[test]
+    fn resolves_the_real_exe_next_to_a_cmd_shim() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin_dir = dir
+            .path()
+            .join("node_modules")
+            .join("@anthropic-ai")
+            .join("claude-code")
+            .join("bin");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+        let exe = bin_dir.join("claude.exe");
+        std::fs::write(&exe, b"").unwrap();
+
+        let shim = dir.path().join("claude.cmd");
+        std::fs::write(&shim, b"").unwrap();
+
+        assert_eq!(resolve_windows_shim(shim), exe);
+    }
+
+    #[test]
+    fn falls_back_to_the_given_path_without_a_sibling_exe() {
+        let dir = tempfile::tempdir().unwrap();
+        let shim = dir.path().join("claude");
+        std::fs::write(&shim, b"").unwrap();
+
+        assert_eq!(resolve_windows_shim(shim.clone()), shim);
     }
 }
