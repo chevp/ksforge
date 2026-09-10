@@ -1,0 +1,34 @@
+[package]
+name = "ksforge"
+version = "0.1.0"
+edition = "2024"
+description = "Turns user stories into controlled, resumable Claude Code workflows (Kosmos ecosystem)"
+license = "MIT"
+repository = "https://github.com/chevp/ksforge"
+readme = "README.md"
+keywords = ["cli", "claude-code", "orchestration", "github-actions", "kosmos"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "ksforge"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+async-trait = "0.1.92"
+chrono = { version = "0.4.45", features = ["serde"] }
+clap = { version = "4.6.6", features = ["derive", "env"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sha2 = "0.11.0"
+tempfile = "3.27.0"
+thiserror = "2.0.20"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "process", "fs", "io-util", "time"] }
+uuid = { version = "1.26.1", features = ["v4", "serde"] }
+walkdir = "2.5.0"
+which = "8.0.6"
+
+[dev-dependencies]
+assert_cmd = "2.2.2"
+predicates = "3.1.4"
+tempfile = "3.27.0"

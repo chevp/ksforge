@@ -1,0 +1,4 @@
+/target
+.ksforge/
+*.swp
+.DS_Store

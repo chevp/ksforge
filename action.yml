@@ -1,0 +1,139 @@
+name: "ksforge"
+description: "Turns a user story into a controlled Claude Code workflow"
+author: "chevp"
+branding:
+  icon: "cpu"
+  color: "purple"
+
+inputs:
+  story:
+    description: "The user story to act on. Required unless resuming."
+    required: false
+  execution-id:
+    description: "Resume this paused execution instead of starting a new one. Requires `decision`."
+    required: false
+  decision:
+    description: "The option id to resume `execution-id` with (see the pending question in the prior run's output)."
+    required: false
+  capability:
+    description: "One of: implement, review, fix, explain."
+    required: false
+    default: "implement"
+  model:
+    description: "Claude Code model alias or full name (e.g. sonnet, claude-sonnet-5)."
+    required: false
+  max-budget-usd:
+    description: "Maximum dollar amount Claude Code may spend on this run."
+    required: false
+  path:
+    description: "Workspace path, relative to the checkout root."
+    required: false
+    default: "."
+  validate:
+    description: "Newline-separated shell commands to run after Claude Code reports success, before the result is trusted."
+    required: false
+  dry-run:
+    description: "Run in an isolated copy of the workspace; never write back to the real checkout."
+    required: false
+    default: "false"
+  create-pull-request:
+    description: "Open a pull request via the `gh` CLI when the run completes with changes."
+    required: false
+    default: "true"
+  base-branch:
+    description: "Base branch for the pull request."
+    required: false
+    default: "main"
+  format:
+    description: "text or json."
+    required: false
+    default: "text"
+  version:
+    description: "ksforge release tag to install, e.g. v0.1.0. Defaults to the latest release."
+    required: false
+    default: "latest"
+
+outputs:
+  status:
+    description: "completed, waiting_for_human, or failed."
+  execution-id:
+    description: "The execution id — pass back via `execution-id` in a follow-up run to resume."
+  changed-files:
+    description: "Newline-separated list of changed files."
+  summary:
+    description: "The execution's summary text."
+  pull-request-url:
+    description: "URL of the opened pull request, when create-pull-request produced one."
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install ksforge
+      shell: bash
+      run: |
+        set -euo pipefail
+        version="${{ inputs.version }}"
+        if [ "$version" = "latest" ]; then
+          url="https://github.com/chevp/ksforge/releases/latest/download/ksforge-linux-x86_64.tar.gz"
+        else
+          url="https://github.com/chevp/ksforge/releases/download/${version}/ksforge-linux-x86_64.tar.gz"
+        fi
+        curl -sSfL "$url" -o /tmp/ksforge.tar.gz
+        curl -sSfL "$url.sha256" -o /tmp/ksforge.tar.gz.sha256 || true
+        if [ -s /tmp/ksforge.tar.gz.sha256 ]; then
+          (cd /tmp && sha256sum -c ksforge.tar.gz.sha256)
+        fi
+        tar -xzf /tmp/ksforge.tar.gz -C /tmp
+        sudo install -m 0755 /tmp/ksforge /usr/local/bin/ksforge
+
+    - name: Run ksforge
+      id: run
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
+      run: |
+        set -euo pipefail
+        args=(--workspace "${{ inputs.path }}" --format "${{ inputs.format }}")
+        [ -n "${{ inputs.model }}" ] && args+=(--model "${{ inputs.model }}")
+        [ -n "${{ inputs.max-budget-usd }}" ] && args+=(--max-budget-usd "${{ inputs.max-budget-usd }}")
+        [ "${{ inputs.dry-run }}" = "true" ] && args+=(--dry-run)
+        [ "${{ inputs.create-pull-request }}" = "true" ] && args+=(--create-pull-request --base-branch "${{ inputs.base-branch }}")
+        if [ -n "${{ inputs.validate }}" ]; then
+          while IFS= read -r cmd; do
+            [ -n "$cmd" ] && args+=(--validate "$cmd")
+          done <<< "${{ inputs.validate }}"
+        fi
+
+        set +e
+        if [ -n "${{ inputs.execution-id }}" ]; then
+          out=$(ksforge resume "${{ inputs.execution-id }}" --decision "${{ inputs.decision }}" "${args[@]}")
+        else
+          out=$(ksforge "${{ inputs.capability }}" --story "${{ inputs.story }}" "${args[@]}")
+        fi
+        code=$?
+        set -e
+
+        echo "$out"
+        echo "raw<<KSFORGE_EOF" >> "$GITHUB_OUTPUT"
+        echo "$out" >> "$GITHUB_OUTPUT"
+        echo "KSFORGE_EOF" >> "$GITHUB_OUTPUT"
+
+        if [ "${{ inputs.format }}" = "json" ]; then
+          status=$(echo "$out" | jq -r '.status // "failed"')
+          exec_id=$(echo "$out" | jq -r '.execution_id // ""')
+          summary=$(echo "$out" | jq -r '.result.summary // .pending_question.question // ""')
+          changed=$(echo "$out" | jq -r '(.result.changed_files // [])[]' 2>/dev/null || true)
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "execution-id=$exec_id" >> "$GITHUB_OUTPUT"
+          echo "summary=$summary" >> "$GITHUB_OUTPUT"
+          echo "changed-files<<KSFORGE_FILES" >> "$GITHUB_OUTPUT"
+          echo "$changed" >> "$GITHUB_OUTPUT"
+          echo "KSFORGE_FILES" >> "$GITHUB_OUTPUT"
+          if [ "$status" = "waiting_for_human" ]; then
+            echo "::notice::ksforge is waiting for a human decision — see the run output for the question and options, then re-run this workflow with execution-id/decision set."
+          elif [ "$status" = "failed" ]; then
+            echo "::error::ksforge run failed: $summary"
+          fi
+        fi
+
+        exit $code

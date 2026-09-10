@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  # Linux x86_64 only for now — see docs/01-installation.md for why the
+  # other four platforms listed in the project's target matrix
+  # (linux-arm64, macos-x86_64, macos-arm64, windows-x86_64) aren't built
+  # yet. Adding one is: add a matrix entry with the right Rust target and
+  # archive step; the rest of this workflow is already target-agnostic.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Test
+        run: cargo test --all
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp target/release/ksforge dist/ksforge
+          tar -czf "dist/ksforge-linux-x86_64.tar.gz" -C dist ksforge
+          cd dist
+          sha256sum "ksforge-linux-x86_64.tar.gz" > "ksforge-linux-x86_64.tar.gz.sha256"
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/ksforge-linux-x86_64.tar.gz
+            dist/ksforge-linux-x86_64.tar.gz.sha256
+          generate_release_notes: true
