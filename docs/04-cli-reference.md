@@ -18,7 +18,7 @@ There is deliberately no `ksforge chat`, `ksforge agent`, or `ksforge ask`
 | Flag | Default | Meaning |
 |---|---|---|
 | `--workspace <path>` | `.` | Workspace root. No GitHub token needed locally. |
-| `--model <name>` | Claude Code's own default | Alias (`sonnet`) or full name. |
+| `--model <name>` | `sonnet` | Alias (`sonnet`) or full name (`claude-sonnet-5`). Overrides ksforge's own default, not just Claude Code's. |
 | `--max-budget-usd <n>` | none | Passed through to Claude Code's own budget cap. |
 | `--claude-path <path>` | PATH lookup | Also settable via `KSFORGE_CLAUDE_PATH`. |
 | `--dry-run` | off | Isolated temp copy; never writes to the real workspace. |

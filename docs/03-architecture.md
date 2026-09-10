@@ -105,12 +105,16 @@ actually matters here.
 
 Every agent turn: `claude -p --output-format json --json-schema <schema>
 --tools <policy> --permission-mode <mode> --permission-prompts none
-[--model] [--append-system-prompt] [--max-budget-usd] [--resume
+--model <name> [--append-system-prompt] [--max-budget-usd] [--resume
 <session-id>] [--mcp-config <path> --strict-mcp-config] "<prompt>"`, with
 the workspace (or its isolated dry-run copy) as the working directory.
 
 - **`--tools`**: `review`/`explain` get `Read,Grep,Glob` only; `implement`/
   `fix` get the default set (no `--tools` flag passed).
+- **`--model`**: always passed — ksforge defaults it to `sonnet` itself
+  (`--model` CLI default / `model` action input default) rather than
+  leaving it unset and deferring to Claude Code's own default, so ksforge's
+  cost/behavior doesn't shift silently if that default ever changes.
 - **`--permission-mode` / `--permission-prompts none`**: never blocks
   waiting for an interactive answer nobody can give in CI —
   `acceptEdits` for write-capable capabilities, `plan` for read-only ones,

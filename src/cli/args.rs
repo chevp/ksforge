@@ -84,7 +84,10 @@ pub struct CommonArgs {
     pub workspace: PathBuf,
 
     /// Model alias or full name, e.g. "sonnet" or "claude-sonnet-5".
-    #[arg(long)]
+    /// Defaults to "sonnet" rather than deferring to Claude Code's own
+    /// default, so ksforge's cost/behavior doesn't shift silently if that
+    /// changes.
+    #[arg(long, default_value = "sonnet")]
     pub model: Option<String>,
 
     /// Maximum dollar amount Claude Code may spend on this run.
