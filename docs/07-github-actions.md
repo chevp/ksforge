@@ -145,4 +145,10 @@ rather than on step success.
 
 The action downloads a prebuilt `linux-x86_64` binary from this repo's
 GitHub Releases (see [01-installation.md](01-installation.md)) rather than
-compiling ksforge on every run.
+compiling ksforge on every run. It also installs Claude Code itself
+(`npm install -g @anthropic-ai/claude-code`, pin a version with
+`claude-code-version`) — skipped if `claude` is already on `PATH` (e.g. a
+self-hosted runner that preinstalls a pinned version). Outside of this
+action (running the CLI directly, see [START.md](../START.md)), Claude
+Code is still your own responsibility to install — see
+[01-installation.md](01-installation.md).

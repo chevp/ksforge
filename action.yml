@@ -55,6 +55,10 @@ inputs:
     description: "ksforge release tag to install, e.g. v0.1.0. Defaults to the latest release."
     required: false
     default: "latest"
+  claude-code-version:
+    description: "@anthropic-ai/claude-code npm version to install, e.g. 1.2.3. Defaults to latest. Skipped entirely if `claude` is already on PATH (e.g. a self-hosted runner that preinstalls it)."
+    required: false
+    default: "latest"
 
 outputs:
   status:
@@ -96,6 +100,29 @@ runs:
         fi
         tar -xzf "/tmp/$archive" -C /tmp
         sudo install -m 0755 /tmp/ksforge /usr/local/bin/ksforge
+
+    - name: Install Claude Code
+      shell: bash
+      env:
+        CLAUDE_CODE_VERSION: ${{ inputs.claude-code-version }}
+      # ksforge spawns `claude` itself (see docs/03-architecture.md) but
+      # does not bundle it — without this step every run fails at
+      # "Claude Code executable not found" unless the caller's own
+      # workflow already installs it. Skipped when `claude` is already on
+      # PATH, so a self-hosted runner that preinstalls a pinned version
+      # isn't overridden.
+      run: |
+        set -euo pipefail
+        if command -v claude >/dev/null 2>&1; then
+          echo "claude already on PATH ($(command -v claude)), skipping install"
+        else
+          version="$CLAUDE_CODE_VERSION"
+          if [ "$version" = "latest" ]; then
+            npm install -g @anthropic-ai/claude-code
+          else
+            npm install -g "@anthropic-ai/claude-code@${version}"
+          fi
+        fi
 
     - name: Run ksforge
       id: run
