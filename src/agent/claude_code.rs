@@ -108,12 +108,7 @@ impl AgentExecutor for ClaudeCodeExecutor {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
         if !output.status.success() {
-            let detail = if stderr.trim().is_empty() {
-                stdout.clone()
-            } else {
-                stderr
-            };
-            return Err(AgentError::NonZeroExit(truncate(&detail, 2000)));
+            return Err(AgentError::NonZeroExit(error_detail(&stdout, &stderr)));
         }
 
         parse_envelope(&stdout)
@@ -165,6 +160,25 @@ fn parse_envelope(stdout: &str) -> Result<AgentResult, AgentError> {
     })
 }
 
+/// Picks the error text for a non-zero exit. Claude Code can exit non-zero
+/// while still emitting a well-formed `--output-format json` envelope on
+/// stdout (e.g. an API-level error such as "Credit balance is too low") —
+/// surface just its `result` message in that case, the same field
+/// `parse_envelope` reads on success, instead of dumping the raw envelope.
+fn error_detail(stdout: &str, stderr: &str) -> String {
+    let detail = if stderr.trim().is_empty() {
+        stdout
+    } else {
+        stderr
+    };
+    if let Ok(envelope) = serde_json::from_str::<ResultEnvelope>(detail.trim())
+        && let Some(result) = envelope.result
+    {
+        return result;
+    }
+    truncate(detail, 2000)
+}
+
 fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         s.to_string()
@@ -202,6 +216,31 @@ fn resolve_windows_shim(path: PathBuf) -> PathBuf {
 #[cfg(not(windows))]
 fn resolve_windows_shim(path: PathBuf) -> PathBuf {
     path
+}
+
+#[cfg(test)]
+mod error_detail_tests {
+    use super::error_detail;
+
+    #[test]
+    fn extracts_result_from_a_json_envelope_on_stdout() {
+        let stdout = r#"{"type":"result","is_error":true,"result":"Credit balance is too low","session_id":"abc"}"#;
+        assert_eq!(error_detail(stdout, ""), "Credit balance is too low");
+    }
+
+    #[test]
+    fn falls_back_to_raw_text_when_not_a_json_envelope() {
+        assert_eq!(
+            error_detail("", "command not found: claude"),
+            "command not found: claude"
+        );
+    }
+
+    #[test]
+    fn falls_back_to_raw_json_when_envelope_has_no_result_field() {
+        let stdout = r#"{"type":"result","is_error":true,"session_id":"abc"}"#;
+        assert_eq!(error_detail(stdout, ""), stdout);
+    }
 }
 
 #[cfg(all(test, windows))]
