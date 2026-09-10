@@ -1,5 +1,37 @@
 # GitHub Actions
 
+## Prerequisite: let Actions open pull requests
+
+`create-pull-request: "true"` needs more than `permissions:
+pull-requests: write` in the workflow YAML — GitHub disables **"Allow
+GitHub Actions to create and approve pull requests"** by default on new
+repositories, and that repo-level setting caps what the YAML's own
+`permissions:` block can grant (a workflow's `permissions:` can only
+narrow this ceiling, never raise it). Without it, the run fails at the PR
+step with:
+
+```text
+GraphQL: GitHub Actions is not permitted to create or approve pull requests (createPullRequest)
+```
+
+— even though the capability itself ran and completed correctly first;
+the failure is purely at PR creation, after the actual change was already
+made (and, since ksforge already pushed the branch by then, that change
+sits on an orphaned branch rather than being lost).
+
+Enable it once per repository: **Settings → Actions → General → Workflow
+permissions → "Allow GitHub Actions to create and approve pull
+requests"** — or via the API:
+
+```bash
+gh api -X PUT repos/<owner>/<repo>/actions/permissions/workflow \
+  -f default_workflow_permissions=read \
+  -F can_approve_pull_request_reviews=true
+```
+
+Not needed for `review`/`explain` or any run with `create-pull-request:
+"false"`.
+
 ## Primary example: `workflow_dispatch`
 
 ```yaml

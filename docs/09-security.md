@@ -61,7 +61,9 @@ Request `contents: write` + `pull-requests: write` only for workflows that
 actually create a PR (`create-pull-request: "true"`); `review`/`explain`
 workflows need only `contents: read` (+ `pull-requests: read` if reviewing
 a PR's diff). Never `permissions: write-all`. See
-[07-github-actions.md](07-github-actions.md) for both shapes.
+[07-github-actions.md](07-github-actions.md) for both shapes, including
+the separate repo-level "Allow GitHub Actions to create and approve pull
+requests" setting that YAML-level `permissions:` cannot substitute for.
 
 ## Secrets
 
