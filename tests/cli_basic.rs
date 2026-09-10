@@ -59,6 +59,39 @@ fn status_on_unknown_execution_is_not_found_exit_1() {
 }
 
 #[test]
+fn cancel_on_unknown_execution_is_not_found_exit_1() {
+    let dir = tempfile::tempdir().unwrap();
+    ksforge()
+        .current_dir(dir.path())
+        .args(["cancel", "ksf_doesnotexist"])
+        .assert()
+        .failure()
+        .code(1);
+}
+
+#[test]
+fn handle_comment_without_choose_command_is_usage_error_exit_2() {
+    let dir = tempfile::tempdir().unwrap();
+    ksforge()
+        .current_dir(dir.path())
+        .args([
+            "handle-comment",
+            "--execution-id",
+            "ksf_doesnotexist",
+            "--comment-id",
+            "1",
+            "--commenter",
+            "someone",
+            "--body",
+            "looks good to me",
+        ])
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicate::str::contains("/ksforge choose"));
+}
+
+#[test]
 fn story_and_story_file_are_mutually_exclusive() {
     let dir = tempfile::tempdir().unwrap();
     ksforge()

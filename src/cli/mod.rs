@@ -20,6 +20,9 @@ pub async fn run() -> i32 {
         Command::Explain(args) => commands::story_capability("explain", args).await,
         Command::Resume(args) => commands::resume(args).await,
         Command::Status(args) => commands::status(args),
+        Command::Cancel(args) => commands::cancel(args),
+        Command::PostReport(args) => commands::post_report(args).await,
+        Command::HandleComment(args) => commands::handle_comment(args).await,
         Command::Capabilities => Ok(commands::capabilities()),
     };
 

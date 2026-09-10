@@ -13,7 +13,7 @@ pub use constraint::Constraint;
 pub use error::{KsforgeError, Result};
 pub use execution::{
     DecisionOption, Execution, ExecutionEvent, ExecutionId, ExecutionResult, ExecutionStatus,
-    HumanDecision, HumanDecisionRequest, ValidationCommandOutcome, ValidationOutcome,
+    GateId, HumanDecision, HumanDecisionRequest, ValidationCommandOutcome, ValidationOutcome,
 };
 pub use request::{ImplementationRequest, ValidationPolicy};
 pub use story::UserStory;

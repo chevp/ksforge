@@ -37,6 +37,31 @@ impl From<String> for ExecutionId {
     }
 }
 
+/// Identifier for a [`HumanDecisionRequest`] ("gate"), stable across the
+/// gate's lifetime so a GitHub comment reply or a `resume` call can address
+/// it unambiguously — the human-readable `question`/label text is never the
+/// only identity of a gate. Format: `gate_<uuidv4 simple>`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct GateId(pub String);
+
+impl GateId {
+    pub fn new() -> Self {
+        Self(format!("gate_{}", Uuid::new_v4().simple()))
+    }
+}
+
+impl Default for GateId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl fmt::Display for GateId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionStatus {
@@ -67,13 +92,30 @@ pub struct DecisionOption {
     pub label: String,
 }
 
-/// Raised when Claude Code reports it needs a human decision to continue.
+/// Raised when Claude Code reports it needs a human decision to continue —
+/// a "gate" in spec terms. Addressed by its own [`GateId`], not by the
+/// execution id or the question text (section 6).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HumanDecisionRequest {
+    #[serde(default)]
+    pub id: GateId,
     pub execution_id: ExecutionId,
     pub question: String,
     pub options: Vec<DecisionOption>,
     pub required: bool,
+    /// Option id Claude Code recommends, when it could form a defensible
+    /// preference from repository evidence (section 12). `None` means no
+    /// recommendation was offered, not that one was omitted by accident.
+    #[serde(default)]
+    pub recommended_option: Option<String>,
+    /// Free-text rationale behind the question/recommendation. Empty when
+    /// the agent gave none.
+    #[serde(default)]
+    pub context: String,
+    /// What was already done before this gate was raised (section 14: the
+    /// "Completed" list on a waiting-for-human report).
+    #[serde(default)]
+    pub completed: Vec<String>,
 }
 
 /// The human's answer to a [`HumanDecisionRequest`].
@@ -81,6 +123,11 @@ pub struct HumanDecisionRequest {
 pub struct HumanDecision {
     pub execution_id: ExecutionId,
     pub option: String,
+    /// Who decided: a GitHub login when resumed via `/ksforge choose` (see
+    /// `github::decision`), `None` for a local CLI `resume` with no
+    /// `--decided-by`.
+    #[serde(default)]
+    pub decided_by: Option<String>,
 }
 
 /// Append-only log of what happened during an execution. This is the single
@@ -105,6 +152,8 @@ pub enum ExecutionEvent {
     },
     HumanDecided {
         option: String,
+        #[serde(default)]
+        decided_by: Option<String>,
         at: DateTime<Utc>,
     },
     AgentResumed {
@@ -155,6 +204,17 @@ pub struct ExecutionResult {
     pub summary: String,
     pub changed_files: Vec<PathBuf>,
     pub validation: ValidationOutcome,
+    /// Work Claude Code reported as done this run (section 10/19). Empty
+    /// when the agent didn't report any — not synthesized by ksforge.
+    #[serde(default)]
+    pub completed: Vec<String>,
+    /// Work that remains and why, when the agent reported some even while
+    /// completing successfully (e.g. follow-ups it flagged but didn't do).
+    #[serde(default)]
+    pub open_items: Vec<String>,
+    /// Free-text next-step recommendation, when the agent gave one.
+    #[serde(default)]
+    pub recommendation: Option<String>,
 }
 
 /// A running or paused unit of orchestration work: a user story being
@@ -170,6 +230,12 @@ pub struct Execution {
     pub artifacts: Vec<PathBuf>,
     pub messages: Vec<ExecutionEvent>,
     pub pending_question: Option<HumanDecisionRequest>,
+    /// Every gate ever raised on this execution, in order — the durable
+    /// history spec §18/19 need for a multi-gate final report and for
+    /// telling "already resolved" apart from "unknown gate" (section 6/17).
+    /// `pending_question`, when `Some`, is always `gates.last()`.
+    #[serde(default)]
+    pub gates: Vec<HumanDecisionRequest>,
     pub result: Option<ExecutionResult>,
     /// Claude Code session id (from the agent's result envelope), used to
     /// resume the same underlying conversation via `claude --resume` when
@@ -193,6 +259,7 @@ impl Execution {
             artifacts: Vec::new(),
             messages: Vec::new(),
             pending_question: None,
+            gates: Vec::new(),
             result: None,
             agent_session_id: None,
             created_at: now,
@@ -210,12 +277,23 @@ impl Execution {
         self.messages.push(event);
     }
 
-    pub fn ask(&mut self, question: String, options: Vec<DecisionOption>) -> HumanDecisionRequest {
+    pub fn ask(
+        &mut self,
+        question: String,
+        options: Vec<DecisionOption>,
+        recommended_option: Option<String>,
+        context: String,
+        completed: Vec<String>,
+    ) -> HumanDecisionRequest {
         let request = HumanDecisionRequest {
+            id: GateId::new(),
             execution_id: self.id.clone(),
             question: question.clone(),
             options,
             required: true,
+            recommended_option,
+            context,
+            completed,
         };
         self.record(ExecutionEvent::QuestionRaised {
             question,
@@ -224,12 +302,21 @@ impl Execution {
         self.status = ExecutionStatus::WaitingForHuman;
         self.current_step = "waiting_for_human".into();
         self.pending_question = Some(request.clone());
+        self.gates.push(request.clone());
         request
+    }
+
+    /// The gate currently awaiting a decision, if any — `pending_question`
+    /// under its "gate" name (section 6/16: a comment-driven decision
+    /// addresses a `GateId`, not just "the execution").
+    pub fn open_gate(&self) -> Option<&HumanDecisionRequest> {
+        self.pending_question.as_ref()
     }
 
     pub fn apply_decision(&mut self, decision: &HumanDecision) {
         self.record(ExecutionEvent::HumanDecided {
             option: decision.option.clone(),
+            decided_by: decision.decided_by.clone(),
             at: Utc::now(),
         });
         self.pending_question = None;
@@ -262,7 +349,30 @@ impl Execution {
             summary: detail,
             changed_files: self.artifacts.clone(),
             validation: ValidationOutcome::default(),
+            completed: Vec::new(),
+            open_items: Vec::new(),
+            recommendation: None,
         });
+    }
+
+    /// Deliberately stop an execution that is not going to be resumed —
+    /// distinct from `fail`: cancellation is a human/operator choice, not
+    /// an error the agent or validation reported (spec §4/20).
+    pub fn cancel(&mut self, reason: impl Into<String>) {
+        let reason = reason.into();
+        self.pending_question = None;
+        self.status = ExecutionStatus::Cancelled;
+        self.current_step = "cancelled".into();
+        self.result = Some(ExecutionResult {
+            success: false,
+            summary: reason,
+            changed_files: self.artifacts.clone(),
+            validation: ValidationOutcome::default(),
+            completed: Vec::new(),
+            open_items: Vec::new(),
+            recommendation: None,
+        });
+        self.record(ExecutionEvent::Cancelled { at: Utc::now() });
     }
 }
 
@@ -286,17 +396,81 @@ mod tests {
                     label: "JWT".into(),
                 },
             ],
+            Some("oauth2".into()),
+            "The repo already has an OAuth-compatible identity boundary.".into(),
+            vec!["Analyzed the authentication module.".into()],
         );
         assert_eq!(exec.status, ExecutionStatus::WaitingForHuman);
         assert!(exec.pending_question.is_some());
         assert_eq!(q.options.len(), 2);
+        assert_eq!(q.recommended_option.as_deref(), Some("oauth2"));
+        assert_eq!(exec.gates.len(), 1);
+        assert_eq!(exec.gates[0].id, q.id);
 
         exec.apply_decision(&HumanDecision {
             execution_id: exec.id.clone(),
             option: "oauth2".into(),
+            decided_by: Some("chevp".into()),
         });
         assert_eq!(exec.status, ExecutionStatus::Running);
         assert!(exec.pending_question.is_none());
+        assert_eq!(exec.gates.len(), 1, "gate history is append-only");
+    }
+
+    #[test]
+    fn multiple_sequential_gates_are_kept_in_history() {
+        let story = UserStory::from_text("As a user...").unwrap();
+        let mut exec = Execution::start(story, "implement");
+
+        exec.ask(
+            "OAuth2 or JWT?".into(),
+            vec![DecisionOption {
+                id: "oauth2".into(),
+                label: "OAuth 2".into(),
+            }],
+            None,
+            String::new(),
+            Vec::new(),
+        );
+        exec.apply_decision(&HumanDecision {
+            execution_id: exec.id.clone(),
+            option: "oauth2".into(),
+            decided_by: None,
+        });
+
+        exec.ask(
+            "Which session store?".into(),
+            vec![DecisionOption {
+                id: "redis".into(),
+                label: "Redis".into(),
+            }],
+            None,
+            String::new(),
+            Vec::new(),
+        );
+        assert_eq!(exec.gates.len(), 2, "each ask() appends a new gate");
+        assert_ne!(exec.gates[0].id, exec.gates[1].id);
+    }
+
+    #[test]
+    fn cancel_stops_a_waiting_execution() {
+        let story = UserStory::from_text("As a user...").unwrap();
+        let mut exec = Execution::start(story, "implement");
+        exec.ask(
+            "OAuth2 or JWT?".into(),
+            vec![DecisionOption {
+                id: "oauth2".into(),
+                label: "OAuth 2".into(),
+            }],
+            None,
+            String::new(),
+            Vec::new(),
+        );
+
+        exec.cancel("no longer needed");
+        assert_eq!(exec.status, ExecutionStatus::Cancelled);
+        assert!(exec.pending_question.is_none());
+        assert_eq!(exec.result.as_ref().unwrap().summary, "no longer needed");
     }
 
     #[test]

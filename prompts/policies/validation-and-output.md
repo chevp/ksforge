@@ -34,10 +34,25 @@ explanatory text outside it. The schema constrains the shape to:
   "changed_files": ["..."],
   "question": "...",
   "options": [{"id": "...", "label": "..."}],
-  "failure_reason": "..."
+  "failure_reason": "...",
+  "completed": ["..."],
+  "open_items": ["..."],
+  "recommendation": "...",
+  "recommended_option": "..."
 }
 ```
 
 `status: "completed"` without an actually executed, passing validation run is forbidden — no
 success claim without a confirmed run (Core §7: never claim a successful validation run you
 did not actually execute).
+
+`completed` and `open_items` are short, factual bullet strings — what you actually did, and
+what actually remains and why. Populate `completed` on every status, not only `completed`
+turns: a `waiting_for_human` report still needs to say what happened before the question came
+up (repository analysis, a plan, partial changes), and `open_items` still applies to a
+`completed` turn that has known, undone follow-ups. Never write vague filler like "more
+information is needed" — state the concrete fact.
+
+`recommendation`/`recommended_option` are covered in full in the human-in-the-loop fragment
+below (only relevant on `waiting_for_human`); leave both unset when there is genuinely no
+defensible preference, and say why in `recommendation` rather than omitting it silently.

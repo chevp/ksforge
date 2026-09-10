@@ -53,24 +53,36 @@ pub struct AgentResult {
 
 #[derive(Debug, Error)]
 pub enum AgentError {
-    #[error(
-        "Claude Code executable not found (looked for: {0}). Install Claude Code or pass --claude-path."
-    )]
+    /// The executor's payload is the whole message, including any
+    /// install/`--*-path` hint — this variant is shared across executors
+    /// (`ClaudeCodeExecutor`, `CodexExecutor`), so it carries no
+    /// CLI-specific wording of its own.
+    #[error("agent executable not found: {0}")]
     NotFound(String),
 
-    #[error("Claude Code exited with a non-zero status: {0}")]
+    #[error("agent process exited with a non-zero status: {0}")]
     NonZeroExit(String),
 
-    #[error("Claude Code produced output that could not be parsed: {0}")]
+    #[error("agent produced output that could not be parsed: {0}")]
     MalformedOutput(String),
+
+    /// A request field this executor has no way to honor (e.g. an
+    /// `AgentRequest.mcp_config` handed to `CodexExecutor`, which has no
+    /// equivalent to Claude Code's `--mcp-config`/`--strict-mcp-config`).
+    /// Raised instead of silently dropping the field, per docs/09-security.md
+    /// (least privilege): an unenforced restriction must fail loud, not
+    /// quietly run with weaker guarantees than the caller asked for.
+    #[error("not supported by this executor: {0}")]
+    Unsupported(String),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }
 
 /// Port to the coding/agent execution engine. `ksforge` never implements a
-/// competing agent loop behind this trait — the only production impl spawns
-/// the real Claude Code CLI (section 2/3).
+/// competing agent loop behind this trait — every production impl spawns a
+/// real external coding-agent CLI (section 2/3): `ClaudeCodeExecutor`
+/// (`claude`) or `CodexExecutor` (`codex`, the OpenAI Codex CLI).
 #[async_trait]
 pub trait AgentExecutor: Send + Sync {
     async fn execute(&self, request: AgentRequest) -> Result<AgentResult, AgentError>;

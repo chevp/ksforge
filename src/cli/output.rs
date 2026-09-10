@@ -23,6 +23,7 @@ fn as_json(execution: &Execution) -> serde_json::Value {
         "capability": execution.capability,
         "status": execution.status.to_string(),
         "pending_question": execution.pending_question,
+        "gates": execution.gates,
         "result": execution.result,
         "artifacts": execution.artifacts,
     })
@@ -58,6 +59,14 @@ fn print_human(execution: &Execution) {
                 for o in &q.options {
                     println!("  {} - {}", o.id, o.label);
                 }
+                if let Some(rec) = &q.recommended_option {
+                    println!();
+                    println!("Recommended:");
+                    println!("  {rec}");
+                    if !q.context.is_empty() {
+                        println!("  {}", q.context);
+                    }
+                }
                 println!();
                 println!(
                     "Resume:\n  ksforge resume {} --decision <option-id>",
@@ -82,6 +91,18 @@ fn print_human(execution: &Execution) {
                     for c in &result.validation.commands {
                         println!("  {} {}", if c.passed { "✓" } else { "✗" }, c.command);
                     }
+                }
+                if !result.open_items.is_empty() {
+                    println!();
+                    println!("Open:");
+                    for item in &result.open_items {
+                        println!("  {item}");
+                    }
+                }
+                if let Some(rec) = &result.recommendation {
+                    println!();
+                    println!("Recommendation:");
+                    println!("  {rec}");
                 }
                 println!();
                 println!("Result:");

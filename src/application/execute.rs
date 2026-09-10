@@ -103,7 +103,21 @@ pub(crate) async fn finish(
                 .question
                 .unwrap_or_else(|| "Claude Code needs a decision to continue.".to_string());
             let options: Vec<DecisionOption> = outcome.options;
-            execution.ask(question, options);
+            // A recommendation that names an option the agent didn't
+            // actually offer is not trustworthy (section: never fully
+            // trust model-reported facts) — drop it rather than surface a
+            // dangling recommendation no option matches.
+            let recommended_option = outcome
+                .recommended_option
+                .filter(|rec| options.iter().any(|o| &o.id == rec));
+            let context = outcome.recommendation.unwrap_or_default();
+            execution.ask(
+                question,
+                options,
+                recommended_option,
+                context,
+                outcome.completed,
+            );
             Ok(())
         }
         OutcomeStatus::WaitingForHuman => {
@@ -160,6 +174,9 @@ pub(crate) async fn finish(
                 summary: outcome.summary,
                 changed_files: changed,
                 validation,
+                completed: outcome.completed,
+                open_items: outcome.open_items,
+                recommendation: outcome.recommendation,
             });
             Ok(())
         }

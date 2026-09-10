@@ -95,7 +95,10 @@ async fn waiting_for_human_pauses_without_blocking_then_resumes() {
             "options": [
                 {"id": "oauth2", "label": "OAuth 2"},
                 {"id": "jwt", "label": "JWT"}
-            ]
+            ],
+            "completed": ["Analyzed the authentication module."],
+            "recommended_option": "oauth2",
+            "recommendation": "The repo already has an OAuth-compatible identity boundary."
         }),
         json!({
             "status": "completed",
@@ -120,12 +123,20 @@ async fn waiting_for_human_pauses_without_blocking_then_resumes() {
     assert_eq!(paused.status, ExecutionStatus::WaitingForHuman);
     let question = paused.pending_question.as_ref().unwrap();
     assert_eq!(question.options.len(), 2);
+    assert_eq!(question.recommended_option.as_deref(), Some("oauth2"));
+    assert_eq!(
+        question.completed,
+        vec!["Analyzed the authentication module."]
+    );
+    assert_eq!(paused.gates.len(), 1);
+    assert_eq!(paused.gates[0].id, question.id);
 
     let registry = CapabilityRegistry::with_defaults();
     let resumed = ksforge::application::resume::resume(
         dir.path(),
         &paused.id,
         "oauth2".to_string(),
+        Some("chevp".to_string()),
         &registry,
         context,
     )
@@ -134,10 +145,10 @@ async fn waiting_for_human_pauses_without_blocking_then_resumes() {
 
     assert_eq!(resumed.status, ExecutionStatus::Completed);
     assert!(resumed.pending_question.is_none());
-    assert!(resumed
-        .messages
-        .iter()
-        .any(|e| matches!(e, ksforge::domain::ExecutionEvent::HumanDecided { option, .. } if option == "oauth2")));
+    assert!(resumed.messages.iter().any(
+        |e| matches!(e, ksforge::domain::ExecutionEvent::HumanDecided { option, decided_by, .. }
+            if option == "oauth2" && decided_by.as_deref() == Some("chevp"))
+    ));
 }
 
 #[tokio::test]
@@ -168,6 +179,7 @@ async fn resuming_with_an_unoffered_option_is_a_usage_error() {
         dir.path(),
         &paused.id,
         "saml".to_string(),
+        None,
         &registry,
         context,
     )

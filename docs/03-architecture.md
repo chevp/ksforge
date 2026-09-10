@@ -6,16 +6,20 @@
 ksforge  = orchestration / product layer: story, capability, policy,
            workflow, durable execution state, GitHub integration.
 
-Claude Code = the coding/agent execution engine. Owns repository
+Claude Code = the default coding/agent execution engine. Owns repository
               exploration, file editing, tool execution, reasoning.
+
+Codex CLI = the OpenAI-backed alternative execution engine, selected via
+            `--engine codex`. Same job as Claude Code, spawned instead of it.
 
 GitHub Actions = an automation runtime ksforge targets. Not the domain.
 ```
 
 ksforge does not implement a coding agent, a repository indexer, a
-tool-calling loop, or a context manager. All of that is Claude Code's job.
-ksforge's job is turning a user story into a controlled request for Claude
-Code to act on, and turning what comes back into something trustworthy and
+tool-calling loop, or a context manager. All of that is the spawned CLI's
+job — Claude Code by default, or the Codex CLI via `--engine codex`.
+ksforge's job is turning a user story into a controlled request for that
+CLI to act on, and turning what comes back into something trustworthy and
 resumable.
 
 ## Module layering
@@ -25,9 +29,10 @@ domain          vocabulary: UserStory, Capability, Constraint,
                  ImplementationRequest, Execution, ExecutionResult.
                  No knowledge of Claude Code's CLI flags or of Git.
 
-agent            the execution-engine port (AgentExecutor) and the one
-                 production implementation (ClaudeCodeExecutor), which
-                 spawns `claude` as a subprocess.
+agent            the execution-engine port (AgentExecutor) and its production
+                 implementations — ClaudeCodeExecutor (spawns `claude`) and
+                 CodexExecutor (spawns `codex`, the OpenAI Codex CLI),
+                 selected via `--engine`.
 
 application      the one shared pipeline (execute::run, resume::resume)
                  plus one Capability impl per verb (implement/review/

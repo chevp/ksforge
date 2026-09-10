@@ -26,13 +26,18 @@ impl ClaudeCodeExecutor {
                     claude_path: path.to_path_buf(),
                 });
             }
-            return Err(AgentError::NotFound(path.display().to_string()));
+            return Err(AgentError::NotFound(format!(
+                "{} (--claude-path). Install Claude Code or pass a valid --claude-path.",
+                path.display()
+            )));
         }
         match which::which("claude") {
             Ok(path) => Ok(Self {
                 claude_path: resolve_windows_shim(path),
             }),
-            Err(_) => Err(AgentError::NotFound("claude (not on PATH)".into())),
+            Err(_) => Err(AgentError::NotFound(
+                "claude (not on PATH). Install Claude Code or pass --claude-path.".into(),
+            )),
         }
     }
 

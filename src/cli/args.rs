@@ -27,6 +27,15 @@ pub enum Command {
     Resume(ResumeArgs),
     /// Show an execution's state, including any pending question.
     Status(StatusArgs),
+    /// Stop an execution that will not be resumed.
+    Cancel(CancelArgs),
+    /// Render an execution's progress report and post/update it as a PR
+    /// comment via `gh` (section 13-15).
+    PostReport(PostReportArgs),
+    /// Validate a `/ksforge choose <option>` PR/issue comment against a
+    /// paused execution's open gate and print the option id to act on —
+    /// does not itself resume (section 16-17). Chain with `ksforge resume`.
+    HandleComment(HandleCommentArgs),
     /// List available capabilities.
     Capabilities,
 }
@@ -36,6 +45,14 @@ pub enum OutputFormat {
     #[default]
     Text,
     Json,
+}
+
+/// Which coding agent CLI ksforge spawns for this run.
+#[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Engine {
+    #[default]
+    Claude,
+    Codex,
 }
 
 #[derive(Args)]
@@ -60,6 +77,12 @@ pub struct ResumeArgs {
     #[arg(long)]
     pub decision: String,
 
+    /// Who decided — a GitHub login when resuming from a `/ksforge choose`
+    /// comment (see `ksforge handle-comment`). Omitted for a plain local
+    /// resume.
+    #[arg(long)]
+    pub decided_by: Option<String>,
+
     #[command(flatten)]
     pub common: CommonArgs,
 }
@@ -77,20 +100,88 @@ pub struct StatusArgs {
 }
 
 #[derive(Args)]
+pub struct CancelArgs {
+    pub execution_id: String,
+
+    /// Why the execution is being cancelled — recorded on the execution.
+    #[arg(long, default_value = "cancelled by operator")]
+    pub reason: String,
+
+    /// Workspace whose `.ksforge/executions` store to read/write.
+    #[arg(long, default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+}
+
+#[derive(Args)]
+pub struct PostReportArgs {
+    pub execution_id: String,
+
+    /// Pull request number to post/update the report comment on.
+    #[arg(long)]
+    pub pr: u64,
+
+    /// Workspace whose `.ksforge/executions` store to read, and whose `gh`
+    /// repo context to post into.
+    #[arg(long, default_value = ".")]
+    pub workspace: PathBuf,
+}
+
+#[derive(Args)]
+pub struct HandleCommentArgs {
+    /// The execution the comment is replying to.
+    #[arg(long)]
+    pub execution_id: String,
+
+    /// The GitHub comment's own numeric id — the idempotency key (section
+    /// 17): the same comment delivered twice must not be acted on twice.
+    #[arg(long)]
+    pub comment_id: String,
+
+    /// The commenter's GitHub login. Re-verified against the repository's
+    /// own permission list before the decision is accepted (section 23) —
+    /// never trusted just because a workflow's `if:` already checked it.
+    #[arg(long)]
+    pub commenter: String,
+
+    /// The raw comment body, e.g. `/ksforge choose oauth2`.
+    #[arg(long)]
+    pub body: String,
+
+    /// Workspace whose `.ksforge/executions` store to read, and whose `gh`
+    /// repo context to check permissions against.
+    #[arg(long, default_value = ".")]
+    pub workspace: PathBuf,
+}
+
+#[derive(Args)]
 pub struct CommonArgs {
     /// Workspace root ksforge and Claude Code operate in. Defaults to the
     /// current directory (section 26: local CLI needs no GitHub token).
     #[arg(long, default_value = ".")]
     pub workspace: PathBuf,
 
-    /// Model alias or full name, e.g. "sonnet" or "claude-sonnet-5".
-    /// Defaults to "sonnet" rather than deferring to Claude Code's own
-    /// default, so ksforge's cost/behavior doesn't shift silently if that
-    /// changes.
-    #[arg(long, default_value = "sonnet")]
+    /// Which coding agent CLI to spawn. "codex" cannot honor
+    /// `--mcp-config`/`--max-budget-usd` (no Codex CLI equivalent) — passing
+    /// either with `--engine codex` fails the run rather than silently
+    /// dropping them.
+    #[arg(long, value_enum, default_value_t = Engine::Claude)]
+    pub engine: Engine,
+
+    /// Model alias or full name, e.g. "sonnet"/"claude-sonnet-5" for
+    /// `--engine claude`, or a Codex model name for `--engine codex`. With
+    /// `--engine claude` and no explicit value, defaults to "sonnet" rather
+    /// than deferring to Claude Code's own default, so ksforge's
+    /// cost/behavior doesn't shift silently if that changes; with
+    /// `--engine codex`, an unset value defers to Codex's own configured
+    /// default instead of wrongly passing it the Claude alias "sonnet".
+    #[arg(long)]
     pub model: Option<String>,
 
-    /// Maximum dollar amount Claude Code may spend on this run.
+    /// Maximum dollar amount the agent may spend on this run. Claude Code
+    /// only; the Codex CLI has no equivalent flag.
     #[arg(long)]
     pub max_budget_usd: Option<f64>,
 
@@ -98,6 +189,11 @@ pub struct CommonArgs {
     /// from PATH (section 32).
     #[arg(long, env = "KSFORGE_CLAUDE_PATH", value_name = "PATH")]
     pub claude_path: Option<PathBuf>,
+
+    /// Explicit path to the Codex CLI executable; otherwise resolved from
+    /// PATH. Only used with `--engine codex`.
+    #[arg(long, env = "KSFORGE_CODEX_PATH", value_name = "PATH")]
+    pub codex_path: Option<PathBuf>,
 
     /// Run in an isolated temporary copy of the workspace; nothing is
     /// written back to the real workspace (section 25).

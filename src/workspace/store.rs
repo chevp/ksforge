@@ -29,6 +29,25 @@ impl ExecutionStore {
         self.dir_for(id).join("request.json")
     }
 
+    fn processed_event_path(&self, id: &ExecutionId, event_id: &str) -> PathBuf {
+        self.dir_for(id).join("processed-events").join(event_id)
+    }
+
+    /// Record that `event_id` (a GitHub comment id) has already been acted
+    /// on for this execution, so a duplicate webhook delivery is a no-op
+    /// (section 17) instead of a second resume attempt. A marker file, same
+    /// pattern as `request.json`/`state.json` — no database, no daemon.
+    pub fn mark_event_processed(&self, id: &ExecutionId, event_id: &str) -> Result<()> {
+        let path = self.processed_event_path(id, event_id);
+        std::fs::create_dir_all(path.parent().expect("processed-events has a parent dir"))?;
+        std::fs::write(path, b"")?;
+        Ok(())
+    }
+
+    pub fn event_already_processed(&self, id: &ExecutionId, event_id: &str) -> bool {
+        self.processed_event_path(id, event_id).exists()
+    }
+
     /// Persist the `ImplementationRequest` a run started from, so `resume`
     /// can reconstruct workspace/constraints/validation policy without the
     /// caller having to re-supply them on the command line.
@@ -91,5 +110,17 @@ mod tests {
         let store = ExecutionStore::new(dir.path());
         let err = store.load(&ExecutionId::new()).unwrap_err();
         assert!(matches!(err, KsforgeError::ExecutionNotFound(_)));
+    }
+
+    #[test]
+    fn processed_events_are_idempotent_markers() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ExecutionStore::new(dir.path());
+        let id = ExecutionId::new();
+
+        assert!(!store.event_already_processed(&id, "12345"));
+        store.mark_event_processed(&id, "12345").unwrap();
+        assert!(store.event_already_processed(&id, "12345"));
+        assert!(!store.event_already_processed(&id, "67890"));
     }
 }

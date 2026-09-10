@@ -11,10 +11,10 @@ pub enum KsforgeError {
     #[error("configuration error: {0}")]
     Config(String),
 
-    #[error("Claude Code is unavailable: {0}")]
+    #[error("agent CLI is unavailable: {0}")]
     ExecutorUnavailable(String),
 
-    #[error("Claude Code execution failed: {0}")]
+    #[error("agent execution failed: {0}")]
     ExecutorFailed(String),
 
     #[error("validation failed: {0}")]
@@ -46,7 +46,7 @@ impl KsforgeError {
     /// ```text
     /// 1 = general/application failure (workspace, GitHub, not-found)
     /// 2 = invalid CLI usage / configuration
-    /// 3 = Claude Code (agent) unavailable or execution failure
+    /// 3 = agent CLI unavailable or execution failure
     /// 4 = validation failure
     /// 5 = policy/safety violation
     /// ```

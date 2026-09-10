@@ -52,7 +52,11 @@ constraining the final response to:
   "changed_files": ["..."],
   "question": "...",
   "options": [{"id": "oauth2", "label": "OAuth 2"}],
-  "failure_reason": "..."
+  "failure_reason": "...",
+  "completed": ["Analyzed the authentication module."],
+  "open_items": ["..."],
+  "recommendation": "The repo already has an OAuth-compatible identity boundary.",
+  "recommended_option": "oauth2"
 }
 ```
 
@@ -63,6 +67,16 @@ block out of free text — that was the first design considered and
 rejected once `--json-schema` turned out to be a real, documented flag on
 the installed Claude Code CLI (see [03-architecture.md](03-architecture.md)
 for what was verified vs. inferred about the envelope this arrives in).
+
+`completed`/`open_items`/`recommendation`/`recommended_option` are the
+structured progress-reporting fields (section 10-12 of the human-in-the-loop
+spec this was built against): Claude Code, not ksforge, produces the
+human-facing "what's done / what's open / what do you recommend" narrative,
+and `github::report::render` turns it into a PR comment — ksforge itself
+never invents progress text. `recommended_option` is dropped (not trusted
+blindly) if it doesn't match one of the `options` actually offered
+(`application::execute::finish`) — never fully trust a model-reported fact
+that isn't independently checkable.
 
 **Honesty about robustness**: this only works as well as Claude Code's
 schema enforcement does, and as well as the system prompt's instruction to
@@ -110,19 +124,33 @@ disappears the moment a job ends. Two complementary answers:
    A ready-to-copy two-job example (start → cache → resume) is in
    [07-github-actions.md](07-github-actions.md).
 
-2. **Issue/PR comment round-trip (documented, not fully wired up)**: the
-   ergonomic version of the above is posting the pending question to a
-   GitHub Issue or PR comment (with a machine-readable block plus
-   human-readable text) so a reply like `/ksforge choose oauth2` can
-   trigger the resume workflow directly, without anyone hand-typing
-   `workflow_dispatch` inputs. This repository does not implement the
-   comment-parsing/triggering side of that yet — `github::pull_request`
-   only handles PR creation after a *completed* execution, not comment
-   commands. If you build this, the shape to aim for: an
-   `issue_comment`-triggered workflow that matches `/ksforge choose
-   (\S+)`, extracts `execution-id` from the original notice comment (put
-   it there when you post the question), and calls `ksforge resume`
-   exactly like path 1 above.
+2. **Issue/PR comment round-trip (implemented)**: the ergonomic version of
+   path 1 posts the pending question as a PR comment, marked with
+   `<!-- ksforge:execution=<id>:report -->`, so a reply like `/ksforge
+   choose oauth2` can trigger the resume workflow directly, without anyone
+   hand-typing `workflow_dispatch` inputs.
+
+   - `ksforge post-report <execution-id> --pr <number>` renders the
+     execution (`github::report::render`) and posts it via `gh`, updating
+     the existing marker comment in place rather than appending a new one
+     each time (`github::comment::post_or_update_report`).
+   - `ksforge handle-comment --execution-id <id> --comment-id <id>
+     --commenter <login> --body <text>` parses a `/ksforge choose <option>`
+     command (`github::decision::parse_choose_command`), re-checks the
+     commenter's repository permission via `gh api
+     .../collaborators/{login}/permission` (`authorize_commenter` —
+     `admin`/`write` only; see [09-security.md](09-security.md)), validates
+     the option against the execution's open gate, and records the GitHub
+     comment id so a duplicate delivery of the same webhook is a no-op
+     (section 17). On success it prints the validated option id and, when
+     `GITHUB_OUTPUT` is set, writes `execution-id=`/`decision=` for the next
+     step.
+   - It does **not** call `resume` itself — chain it:
+     `ksforge resume <execution-id> --decision <option> --decided-by
+     <commenter>`. Exactly one code path (`application::resume::resume`)
+     ever talks to Claude Code again.
+
+   See the third example workflow in [07-github-actions.md](07-github-actions.md).
 
 ## What does *not* survive across a paused GitHub Actions job
 

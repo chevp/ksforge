@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use tokio::process::Command;
+use crate::domain::{Execution, ExecutionStatus, Result};
 
-use crate::domain::{Execution, ExecutionStatus, KsforgeError, Result};
+use super::process::{run_gh, run_git};
 
 /// The only place in ksforge that knows about branches, commits, or pull
 /// requests (section 20 is mandatory: Git/GitHub are infrastructure, never
@@ -96,31 +96,6 @@ fn pr_body(execution: &Execution) -> String {
             ))
             .unwrap_or_default(),
     )
-}
-
-async fn run_git(cwd: &Path, args: &[&str]) -> Result<String> {
-    run(cwd, "git", args).await
-}
-
-async fn run_gh(cwd: &Path, args: &[&str]) -> Result<String> {
-    run(cwd, "gh", args).await
-}
-
-async fn run(cwd: &Path, program: &str, args: &[&str]) -> Result<String> {
-    let output = Command::new(program)
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .await
-        .map_err(|e| KsforgeError::GitHub(format!("failed to run {program} {args:?}: {e}")))?;
-
-    if !output.status.success() {
-        return Err(KsforgeError::GitHub(format!(
-            "{program} {args:?} failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        )));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 fn short_id(id: &str) -> &str {

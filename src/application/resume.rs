@@ -17,6 +17,7 @@ pub async fn resume(
     workspace_root: &std::path::Path,
     id: &ExecutionId,
     option: String,
+    decided_by: Option<String>,
     registry: &CapabilityRegistry,
     context: ExecutionContext,
 ) -> Result<Execution> {
@@ -60,6 +61,7 @@ pub async fn resume(
     execution.apply_decision(&HumanDecision {
         execution_id: id.clone(),
         option: option.clone(),
+        decided_by,
     });
     store.save(&execution)?;
 

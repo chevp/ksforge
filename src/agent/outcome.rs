@@ -23,6 +23,25 @@ pub struct AgentOutcome {
     pub options: Vec<DecisionOption>,
     #[serde(default)]
     pub failure_reason: Option<String>,
+    /// Work done this turn, in the agent's own words (section 10/19).
+    #[serde(default)]
+    pub completed: Vec<String>,
+    /// Work that remains and why — populated on `completed` when there are
+    /// known follow-ups, and implicitly understood on `waiting_for_human`
+    /// (the open item is the question itself).
+    #[serde(default)]
+    pub open_items: Vec<String>,
+    /// Free-text rationale for `recommended_option`, or for a next step
+    /// when there is no pending question. `None` only when there is
+    /// genuinely no defensible preference (section 12) — never omitted to
+    /// save space.
+    #[serde(default)]
+    pub recommendation: Option<String>,
+    /// The `options[].id` the agent recommends when `waiting_for_human`.
+    /// Must be one of `options`; unmatched values are ignored rather than
+    /// rejected (section: never fully trust model-reported facts).
+    #[serde(default)]
+    pub recommended_option: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,7 +81,17 @@ pub fn schema() -> Value {
                     "required": ["id", "label"]
                 }
             },
-            "failure_reason": { "type": "string" }
+            "failure_reason": { "type": "string" },
+            "completed": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
+            "open_items": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
+            "recommendation": { "type": "string" },
+            "recommended_option": { "type": "string" }
         },
         "required": ["status", "summary"]
     })

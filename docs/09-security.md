@@ -21,13 +21,39 @@ Concretely:
   (`ImplementationRequest.story` / `.constraints`) all the way through —
   nothing merges arbitrary repository text into the constraint list.
 - For public repositories, require explicit authorization before a
-  workflow can modify code or open a PR: gate `workflow_dispatch` (manual,
-  already requires repo write access to trigger) rather than wiring
-  ksforge to `issues`/`issue_comment` events that fire on
-  externally-triggerable content without a maintainer's explicit action in
-  between. The two-run resume pattern in
-  [07-github-actions.md](07-github-actions.md) is `workflow_dispatch`-only
-  for this reason.
+  workflow can modify code or open a PR. The primary run (`ksforge
+  implement ...`) should stay `workflow_dispatch`-gated (manual, already
+  requires repo write access to trigger) — the two-run resume pattern in
+  [07-github-actions.md](07-github-actions.md) does this.
+- A **paused** execution's decision may additionally be resumed via
+  `issue_comment` (`/ksforge choose <option>`, section 16 of the
+  human-in-the-loop spec), which *does* fire on externally-triggerable
+  content — this is deliberately allowed, but only with defense in depth,
+  since a single check either side could omit is not enough on its own:
+  1. **Workflow-level filter**: the example workflow in
+     [07-github-actions.md](07-github-actions.md) gates its job on
+     `github.event.comment.author_association` (`OWNER`/`MEMBER`/
+     `COLLABORATOR` only) — a fast, cheap rejection of most noise.
+  2. **ksforge's own re-check**: `ksforge handle-comment` independently
+     calls `gh api repos/{owner}/{repo}/collaborators/{login}/permission`
+     (`github::decision::authorize_commenter`) and only accepts `admin`/
+     `write`. This does not trust the workflow's own `if:` — a commenter
+     whose association changed, or a misconfigured `if:`, is still caught
+     here. A failed/absent permission lookup is treated as unauthorized,
+     never as an error that lets the decision through.
+  3. **Gate/option validation**: the comment must name a currently-open
+     gate's execution and one of its actual options — an arbitrary comment
+     that merely resembles the command is rejected (section 16: "never
+     resume solely because a comment contains text resembling a decision").
+  4. **Idempotency**: the GitHub comment's numeric id is recorded once
+     acted on (`ExecutionStore::mark_event_processed`), so a duplicate
+     webhook delivery for the same comment is a no-op, not a second resume
+     (section 17).
+
+  What a `/ksforge choose` comment can *never* do: start a new execution,
+  choose an arbitrary capability, or bypass `--validate`/`--create-pull-request`
+  policy — it only supplies the `option` id `ksforge resume` needs, on an
+  execution and gate that already exist.
 
 ## Least privilege
 
