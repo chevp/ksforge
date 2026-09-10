@@ -33,6 +33,7 @@ async fn completed_run_persists_and_reports_success() {
         model: None,
         max_budget_usd: None,
         dry_run: false,
+        mcp_config: None,
     };
 
     let execution = Implement
@@ -65,6 +66,7 @@ async fn dry_run_never_touches_the_real_workspace() {
         model: None,
         max_budget_usd: None,
         dry_run: true,
+        mcp_config: None,
     };
 
     let execution = Implement
@@ -107,6 +109,7 @@ async fn waiting_for_human_pauses_without_blocking_then_resumes() {
         model: None,
         max_budget_usd: None,
         dry_run: false,
+        mcp_config: None,
     };
 
     let paused = Implement
@@ -152,6 +155,7 @@ async fn resuming_with_an_unoffered_option_is_a_usage_error() {
         model: None,
         max_budget_usd: None,
         dry_run: false,
+        mcp_config: None,
     };
 
     let paused = Implement

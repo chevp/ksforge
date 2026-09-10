@@ -95,6 +95,7 @@ pub async fn resume(
         json_schema: Some(crate::agent::outcome::schema()),
         max_budget_usd: context.max_budget_usd,
         resume_session_id: execution.agent_session_id.clone(),
+        mcp_config: context.mcp_config.clone(),
     };
 
     let agent_result = context

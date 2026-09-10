@@ -4,6 +4,11 @@ A capability is what kind of operation ksforge is orchestrating. All four
 share one execution pipeline (`application::execute::run`); each only
 supplies policy.
 
+Not to be confused with an **integration** ([11-integrations.md](11-integrations.md)):
+a capability picks *what ksforge is doing* (implement/review/fix/explain);
+an integration only adds *tools* (an MCP server) to whichever capability
+is running.
+
 | Capability | Tools | Writes? | Human-in-the-loop? |
 |---|---|---|---|
 | `implement` | default (full) | yes | yes |
@@ -24,7 +29,11 @@ Implement `domain::Capability` (`id`, `description`, `tool_policy`,
 and `execute` — which every built-in impl implements as a one-liner
 delegating to `application::execute::run`, see the doc comment on the
 trait for why that can't be a default method) and register it in
-`domain::capability::CapabilityRegistry::with_defaults`.
+`domain::capability::CapabilityRegistry::with_defaults`. `prompt_fragment`
+is just `include_str!("../../prompts/capabilities/<id>.md")` for every
+built-in capability — add the new capability's own instructions as a
+markdown file there rather than an inline string, see "Prompt structure"
+in [03-architecture.md](03-architecture.md).
 
 Declarative, YAML-defined capabilities (loaded at runtime rather than
 compiled in) were deliberately not built for this version — the

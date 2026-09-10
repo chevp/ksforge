@@ -5,6 +5,8 @@
 pub mod isolate;
 pub mod snapshot;
 pub mod store;
+pub mod story_archive;
 
 pub use isolate::{IsolatedWorkspace, resolve_root};
 pub use store::ExecutionStore;
+pub use story_archive::{StoryArchive, StoryRecord};

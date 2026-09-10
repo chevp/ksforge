@@ -32,10 +32,7 @@ impl Capability for Fix {
     }
 
     fn prompt_fragment(&self) -> &'static str {
-        "The story below describes a problem, not a feature request. Find its root \
-         cause before changing anything, then apply the smallest fix that resolves \
-         it without masking the underlying issue (e.g. do not silently swallow an \
-         error instead of fixing what causes it)."
+        include_str!("../../prompts/capabilities/fix.md")
     }
 
     async fn execute(

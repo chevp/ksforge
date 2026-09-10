@@ -20,8 +20,13 @@ real project to justify a config file yet.
 Everything else is a flag on the command in question — see
 [04-cli-reference.md](04-cli-reference.md) for the full table
 (`--workspace`, `--model`, `--max-budget-usd`, `--validate`, `--dry-run`,
-`--format`, `--create-pull-request`, `--base-branch`) or `action.yml` for
-the GitHub Actions equivalents.
+`--format`, `--create-pull-request`, `--base-branch`, `--mcp-config`) or
+`action.yml` for the GitHub Actions equivalents.
+
+`--mcp-config` points at a file, but is not itself a ksforge config file —
+that file is Claude Code's own MCP config format, unparsed and unvalidated
+by ksforge (see [11-integrations.md](11-integrations.md)); ksforge's own
+"no config file" position above still holds.
 
 ## If you need project-level defaults today
 

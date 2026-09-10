@@ -117,4 +117,11 @@ pub struct CommonArgs {
     /// Base branch for `--create-pull-request` (section 19).
     #[arg(long, default_value = "main")]
     pub base_branch: String,
+
+    /// Path to a Claude Code `--mcp-config` file, giving the agent access
+    /// to additional MCP servers (e.g. read-only access to an external
+    /// system) for this run — passed straight through, together with
+    /// `--strict-mcp-config`. See docs/11-integrations.md.
+    #[arg(long, value_name = "PATH")]
+    pub mcp_config: Option<PathBuf>,
 }

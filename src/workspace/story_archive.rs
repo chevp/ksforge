@@ -1,0 +1,156 @@
+use std::path::{Path, PathBuf};
+
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::domain::{ExecutionId, Result, UserStory};
+
+/// Filesystem-backed archive of every user story ksforge has been asked to
+/// act on, under `<workspace_root>/.ksforge/user-stories/` — the
+/// `.ksforge/<category>/` layout ksforge owns and that other future record
+/// types (e.g. ADRs) follow the same way. Each story gets a `US-<base62>`
+/// id, a markdown snapshot of the raw story text, and a JSON record tying
+/// the two together with the execution it started.
+///
+/// The id is a base62-encoded random value (from a `Uuid::new_v4`), not a
+/// persisted counter. A shared counter file races the moment two `ksforge`
+/// runs execute concurrently — e.g. two GitHub Actions workflow runs
+/// triggered close together — since increment-then-write has no locking
+/// here. A random id needs no shared mutable state at all, so parallel runs
+/// can never collide or clobber each other's counter.
+pub struct StoryArchive {
+    root: PathBuf,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoryRecord {
+    pub id: String,
+    pub text: String,
+    pub capability: String,
+    pub execution_id: ExecutionId,
+    pub markdown_file: String,
+    pub created_at: DateTime<Utc>,
+}
+
+const BASE62_ALPHABET: &[u8] =
+    b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+fn base62_encode(mut value: u128) -> String {
+    if value == 0 {
+        return "0".to_string();
+    }
+    let mut digits = Vec::new();
+    while value > 0 {
+        digits.push(BASE62_ALPHABET[(value % 62) as usize]);
+        value /= 62;
+    }
+    digits.reverse();
+    String::from_utf8(digits).expect("base62 alphabet is ASCII")
+}
+
+fn new_id() -> String {
+    format!("US-{}", base62_encode(Uuid::new_v4().as_u128()))
+}
+
+impl StoryArchive {
+    pub fn new(workspace_root: &Path) -> Self {
+        Self {
+            root: workspace_root.join(".ksforge").join("user-stories"),
+        }
+    }
+
+    /// Persist `story` as markdown plus a JSON record, before the execution
+    /// it seeds runs. Called once per new `Execution` (section:
+    /// `execute::run`) — never on resume, since a resumed execution
+    /// continues an already-archived story rather than submitting a new
+    /// one.
+    pub fn record(
+        &self,
+        story: &UserStory,
+        capability: &str,
+        execution_id: &ExecutionId,
+    ) -> Result<StoryRecord> {
+        std::fs::create_dir_all(&self.root)?;
+        let id = new_id();
+        let md_name = format!("{id}.md");
+        std::fs::write(self.root.join(&md_name), format!("{}\n", story.text.trim()))?;
+
+        let record = StoryRecord {
+            id: id.clone(),
+            text: story.text.clone(),
+            capability: capability.to_string(),
+            execution_id: execution_id.clone(),
+            markdown_file: format!(".ksforge/user-stories/{md_name}"),
+            created_at: Utc::now(),
+        };
+        let json = serde_json::to_string_pretty(&record)?;
+        std::fs::write(self.root.join(format!("{id}.json")), json)?;
+        Ok(record)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn assigns_base62_ids_and_writes_markdown_and_json() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive = StoryArchive::new(dir.path());
+
+        let story_a = UserStory::from_text("As a user, I want story A.").unwrap();
+        let record_a = archive
+            .record(&story_a, "implement", &ExecutionId::new())
+            .unwrap();
+        assert!(record_a.id.starts_with("US-"));
+        assert!(record_a.id["US-".len()..].chars().all(|c| c.is_ascii_alphanumeric()));
+
+        let story_b = UserStory::from_text("As a user, I want story B.").unwrap();
+        let record_b = archive
+            .record(&story_b, "implement", &ExecutionId::new())
+            .unwrap();
+        assert_ne!(record_a.id, record_b.id);
+
+        let md_path = dir
+            .path()
+            .join(format!(".ksforge/user-stories/{}.md", record_a.id));
+        assert_eq!(
+            std::fs::read_to_string(&md_path).unwrap(),
+            "As a user, I want story A.\n"
+        );
+
+        let json_path = dir
+            .path()
+            .join(format!(".ksforge/user-stories/{}.json", record_a.id));
+        let parsed: StoryRecord =
+            serde_json::from_str(&std::fs::read_to_string(&json_path).unwrap()).unwrap();
+        assert_eq!(parsed.id, record_a.id);
+        assert_eq!(
+            parsed.markdown_file,
+            format!(".ksforge/user-stories/{}.md", record_a.id)
+        );
+    }
+
+    #[test]
+    fn concurrent_records_never_collide_without_shared_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive = StoryArchive::new(dir.path());
+        let story = UserStory::from_text("As a user, I want something.").unwrap();
+
+        let mut ids = std::collections::HashSet::new();
+        for _ in 0..100 {
+            let record = archive
+                .record(&story, "implement", &ExecutionId::new())
+                .unwrap();
+            assert!(ids.insert(record.id), "base62 id collided");
+        }
+    }
+
+    #[test]
+    fn base62_encoding_round_trips_known_values() {
+        assert_eq!(base62_encode(0), "0");
+        assert_eq!(base62_encode(61), "z");
+        assert_eq!(base62_encode(62), "10");
+    }
+}

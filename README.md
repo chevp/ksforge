@@ -70,8 +70,9 @@ resumable two-run pattern for when Claude Code needs a decision mid-story.
 | [08 — Validation](docs/08-validation.md) | `--validate`, and why it's never model-controlled |
 | [09 — Security](docs/09-security.md) | Prompt injection posture, least privilege, secret handling |
 | [10 — Configuration](docs/10-configuration.md) | Environment variables and why there's no config file (yet) |
+| [11 — Integrations](docs/11-integrations.md) | Optional MCP servers via `--mcp-config`, and how that differs from a capability |
 
-Also: [BUILD.md](BUILD.md) (build/test/lint loop), [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), [CHANGELOG.md](CHANGELOG.md).
+Also: [INSTALL.md](INSTALL.md) (install/global setup), [START.md](START.md) (first run), [BUILD.md](BUILD.md) (build/test/lint loop), [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md).
 
 ## License
 

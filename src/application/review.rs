@@ -28,10 +28,7 @@ impl Capability for Review {
     }
 
     fn prompt_fragment(&self) -> &'static str {
-        "Review the workspace (or the story's area of focus, if it names one) and \
-         report findings: bugs, risks, and concrete improvement opportunities. Do \
-         not propose changing files you have not actually inspected. Put your \
-         findings in the summary field, most important first."
+        include_str!("../../prompts/capabilities/review.md")
     }
 
     async fn execute(

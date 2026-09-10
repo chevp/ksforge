@@ -31,6 +31,10 @@ pub struct ExecutionContext {
     pub model: Option<String>,
     pub max_budget_usd: Option<f64>,
     pub dry_run: bool,
+    /// Path to a Claude Code `--mcp-config` file, giving the agent access
+    /// to additional MCP servers for this run — see
+    /// docs/11-integrations.md. `None` by default.
+    pub mcp_config: Option<PathBuf>,
 }
 
 /// A kind of operation ksforge can orchestrate (section 8/9). Capabilities

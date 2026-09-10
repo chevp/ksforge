@@ -56,6 +56,16 @@ a PR's diff). Never `permissions: write-all`. See
   (`GH_TOKEN`/`GITHUB_TOKEN` or `gh auth login` state) the same way
   outside of ksforge — no token handling lives in ksforge's own code.
 
+## Integrations (`--mcp-config`)
+
+`--mcp-config <path>` (see [11-integrations.md](11-integrations.md)) is
+always paired with `--strict-mcp-config`, so a run only ever gets the MCP
+servers explicitly named in that file — never anything a user- or
+project-level Claude Code config might otherwise contribute. ksforge does
+not parse, validate, or filter the file's contents (including any `env`
+map inside it); that trust boundary is the same one that already applies
+to the workspace and story text the file lives next to, not a new one.
+
 ## Command execution
 
 The only user-controlled command execution is `--validate` (see

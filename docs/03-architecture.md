@@ -32,12 +32,17 @@ agent            the execution-engine port (AgentExecutor) and the one
 application      the one shared pipeline (execute::run, resume::resume)
                  plus one Capability impl per verb (implement/review/
                  fix/explain) supplying policy: prompts, tool scope,
-                 default constraints.
+                 default constraints. Prompt text itself lives outside
+                 Rust, under `prompts/` (see "Prompt structure" below);
+                 `application::prompt` only assembles it.
 
 workspace        filesystem concerns: resolving the workspace root,
                  dry-run isolation, change detection (content hashing,
-                 no Git dependency), and Execution persistence under
-                 .ksforge/executions/<id>/.
+                 no Git dependency), Execution persistence under
+                 .ksforge/executions/<id>/, and the story archive
+                 (raw story text as markdown + a JSON record, id
+                 `US-<base62>` — random, no shared counter, so concurrent
+                 runs never collide) under .ksforge/user-stories/.
 
 validation       runs user-supplied shell commands after Claude Code
                  reports success, before ksforge trusts the result.
@@ -49,6 +54,44 @@ github           the only module that knows about branches, commits, or
 cli              argument parsing, dispatch, output formatting. The only
                  layer that knows this is a command-line tool.
 ```
+
+## Prompt structure
+
+Modeled on the sibling tool `tools/palau-test` (Core + policies, compiled
+in rather than read from disk — see below for why): a stable,
+capability-independent Core plus depth split into policy files, loaded
+together on every run by `application::prompt::build`.
+
+```text
+prompts/
+  system-prompt.md              Core, §1-§8: identity, authority/prompt-
+                                 injection posture, the UNDERSTAND->LOCATE->
+                                 CHANGE->VALIDATE->REPORT loop, the absolute
+                                 "never" list. Capability-independent and
+                                 always loaded first.
+  policies/
+    repository-analysis.md      §10-§11: what to inspect, existing code
+                                 over new code.
+    validation-and-output.md    §20-§22: the validation workflow and the
+                                 exact JSON output schema.
+  fragments/
+    human-in-the-loop.md        §23: the waiting_for_human protocol —
+                                 appended only when
+                                 Capability::supports_human_interaction()
+                                 is true (review/explain never see it).
+  capabilities/
+    implement.md, review.md,
+    fix.md, explain.md          One capability-specific instruction
+                                 fragment each; `Capability::prompt_fragment`
+                                 is just `include_str!` of its own file.
+```
+
+These are embedded into the binary at compile time via `include_str!`
+(`application::prompt.rs`), not read from disk at runtime — unlike
+`palau-test`, ksforge ships as a single binary with no accompanying files
+(see `.github/workflows/release.yml`), so runtime file reads would break
+for anyone using the release tarball. Editing a prompt still just means
+editing a `.md` file; it takes effect on the next `cargo build`.
 
 One deliberate looseness: `domain::capability::ExecutionContext` (which a
 `Capability::execute` takes) holds an `Arc<dyn AgentExecutor>` — so `domain`
@@ -63,8 +106,8 @@ actually matters here.
 Every agent turn: `claude -p --output-format json --json-schema <schema>
 --tools <policy> --permission-mode <mode> --permission-prompts none
 [--model] [--append-system-prompt] [--max-budget-usd] [--resume
-<session-id>] "<prompt>"`, with the workspace (or its isolated dry-run
-copy) as the working directory.
+<session-id>] [--mcp-config <path> --strict-mcp-config] "<prompt>"`, with
+the workspace (or its isolated dry-run copy) as the working directory.
 
 - **`--tools`**: `review`/`explain` get `Read,Grep,Glob` only; `implement`/
   `fix` get the default set (no `--tools` flag passed).
@@ -80,6 +123,10 @@ copy) as the working directory.
   [06-human-in-the-loop.md](06-human-in-the-loop.md) for why this is the
   mechanism for "Claude Code needs a decision," not a heuristic text
   convention.
+- **`--mcp-config` / `--strict-mcp-config`**: only added when `--mcp-config
+  <path>` was passed to ksforge (see docs/11-integrations.md); the path is
+  passed through unmodified — ksforge does not parse or validate that
+  file's contents, it's Claude Code's own schema, not a ksforge one.
 
 **What's verified vs. inferred**: the flags above were confirmed against a
 real `claude --help` on the machine this was built on. The `--print

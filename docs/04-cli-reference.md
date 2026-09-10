@@ -26,6 +26,7 @@ There is deliberately no `ksforge chat`, `ksforge agent`, or `ksforge ask`
 | `--format text\|json` | `text` | `json` mode: stdout is exactly one JSON object. |
 | `--create-pull-request` | off | Opens a PR via `gh` if the run completed with changes. |
 | `--base-branch <name>` | `main` | Base branch for `--create-pull-request`. |
+| `--mcp-config <path>` | none | Passed through to Claude Code as `--mcp-config <path> --strict-mcp-config` — see [11-integrations.md](11-integrations.md). |
 
 ## Exit codes
 

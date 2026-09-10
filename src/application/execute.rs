@@ -3,7 +3,7 @@ use crate::domain::{
     Capability, DecisionOption, Execution, ExecutionContext, ExecutionEvent, ExecutionResult,
     ImplementationRequest, KsforgeError, Result, ToolPolicy, ValidationOutcome,
 };
-use crate::workspace::{self, ExecutionStore};
+use crate::workspace::{self, ExecutionStore, StoryArchive};
 use crate::{application::prompt, validation};
 
 /// The one execution pipeline shared by every capability (section 19: don't
@@ -19,6 +19,11 @@ pub async fn run(
     let mut execution = Execution::start(request.story.clone(), capability.id());
     store.save_request(&execution.id, &request)?;
     store.save(&execution)?;
+
+    // ksforge itself owns turning the raw story text into a durable
+    // markdown + numbered-JSON record (section: story archive) — callers
+    // (e.g. the GitHub Action) only ever hand it a plain string.
+    StoryArchive::new(&request.workspace).record(&request.story, capability.id(), &execution.id)?;
 
     let isolated = if context.dry_run {
         Some(workspace::isolate::prepare(&request.workspace)?)
@@ -49,6 +54,7 @@ pub async fn run(
         json_schema: Some(crate::agent::outcome::schema()),
         max_budget_usd: context.max_budget_usd,
         resume_session_id: None,
+        mcp_config: context.mcp_config.clone(),
     };
 
     let agent_result = context.executor.execute(agent_request).await.map_err(|e| {

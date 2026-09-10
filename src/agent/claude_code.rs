@@ -85,6 +85,15 @@ impl AgentExecutor for ClaudeCodeExecutor {
         if let Some(session_id) = &request.resume_session_id {
             cmd.arg("--resume").arg(session_id);
         }
+        if let Some(mcp_config) = &request.mcp_config {
+            // `--strict-mcp-config` always accompanies it: only the servers
+            // named in that file are available, never anything picked up
+            // from a user/global Claude Code config (section: least
+            // privilege, docs/09-security.md).
+            cmd.arg("--mcp-config")
+                .arg(mcp_config)
+                .arg("--strict-mcp-config");
+        }
 
         cmd.arg(&request.prompt);
 

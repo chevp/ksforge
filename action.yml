@@ -48,6 +48,9 @@ inputs:
     description: "text or json."
     required: false
     default: "text"
+  mcp-config:
+    description: "Path (relative to the checkout root) to a Claude Code --mcp-config JSON file, for optional MCP integrations. See docs/11-integrations.md."
+    required: false
   version:
     description: "ksforge release tag to install, e.g. v0.1.0. Defaults to the latest release."
     required: false
@@ -70,9 +73,11 @@ runs:
   steps:
     - name: Install ksforge
       shell: bash
+      env:
+        KSFORGE_VERSION: ${{ inputs.version }}
       run: |
         set -euo pipefail
-        version="${{ inputs.version }}"
+        version="$KSFORGE_VERSION"
         if [ "$version" = "latest" ]; then
           url="https://github.com/chevp/ksforge/releases/latest/download/ksforge-linux-x86_64.tar.gz"
         else
@@ -91,24 +96,43 @@ runs:
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
+        KSFORGE_STORY: ${{ inputs.story }}
+        KSFORGE_EXECUTION_ID: ${{ inputs.execution-id }}
+        KSFORGE_DECISION: ${{ inputs.decision }}
+        KSFORGE_CAPABILITY: ${{ inputs.capability }}
+        KSFORGE_MODEL: ${{ inputs.model }}
+        KSFORGE_MAX_BUDGET_USD: ${{ inputs.max-budget-usd }}
+        KSFORGE_PATH: ${{ inputs.path }}
+        KSFORGE_VALIDATE: ${{ inputs.validate }}
+        KSFORGE_DRY_RUN: ${{ inputs.dry-run }}
+        KSFORGE_CREATE_PR: ${{ inputs.create-pull-request }}
+        KSFORGE_BASE_BRANCH: ${{ inputs.base-branch }}
+        KSFORGE_FORMAT: ${{ inputs.format }}
+        KSFORGE_MCP_CONFIG: ${{ inputs.mcp-config }}
+      # All free-form inputs (story, in particular) are read from env vars
+      # here rather than interpolated as `${{ inputs.x }}` directly into
+      # this script — GitHub Actions expands `${{ }}` as raw text
+      # substitution before bash parses the line, so inlining untrusted
+      # input would let it break out of its quotes and inject commands.
       run: |
         set -euo pipefail
-        args=(--workspace "${{ inputs.path }}" --format "${{ inputs.format }}")
-        [ -n "${{ inputs.model }}" ] && args+=(--model "${{ inputs.model }}")
-        [ -n "${{ inputs.max-budget-usd }}" ] && args+=(--max-budget-usd "${{ inputs.max-budget-usd }}")
-        [ "${{ inputs.dry-run }}" = "true" ] && args+=(--dry-run)
-        [ "${{ inputs.create-pull-request }}" = "true" ] && args+=(--create-pull-request --base-branch "${{ inputs.base-branch }}")
-        if [ -n "${{ inputs.validate }}" ]; then
+        args=(--workspace "$KSFORGE_PATH" --format "$KSFORGE_FORMAT")
+        [ -n "$KSFORGE_MODEL" ] && args+=(--model "$KSFORGE_MODEL")
+        [ -n "$KSFORGE_MAX_BUDGET_USD" ] && args+=(--max-budget-usd "$KSFORGE_MAX_BUDGET_USD")
+        [ "$KSFORGE_DRY_RUN" = "true" ] && args+=(--dry-run)
+        [ "$KSFORGE_CREATE_PR" = "true" ] && args+=(--create-pull-request --base-branch "$KSFORGE_BASE_BRANCH")
+        [ -n "$KSFORGE_MCP_CONFIG" ] && args+=(--mcp-config "$KSFORGE_MCP_CONFIG")
+        if [ -n "$KSFORGE_VALIDATE" ]; then
           while IFS= read -r cmd; do
             [ -n "$cmd" ] && args+=(--validate "$cmd")
-          done <<< "${{ inputs.validate }}"
+          done <<< "$KSFORGE_VALIDATE"
         fi
 
         set +e
-        if [ -n "${{ inputs.execution-id }}" ]; then
-          out=$(ksforge resume "${{ inputs.execution-id }}" --decision "${{ inputs.decision }}" "${args[@]}")
+        if [ -n "$KSFORGE_EXECUTION_ID" ]; then
+          out=$(ksforge resume "$KSFORGE_EXECUTION_ID" --decision "$KSFORGE_DECISION" "${args[@]}")
         else
-          out=$(ksforge "${{ inputs.capability }}" --story "${{ inputs.story }}" "${args[@]}")
+          out=$(ksforge "$KSFORGE_CAPABILITY" --story "$KSFORGE_STORY" "${args[@]}")
         fi
         code=$?
         set -e
@@ -118,7 +142,7 @@ runs:
         echo "$out" >> "$GITHUB_OUTPUT"
         echo "KSFORGE_EOF" >> "$GITHUB_OUTPUT"
 
-        if [ "${{ inputs.format }}" = "json" ]; then
+        if [ "$KSFORGE_FORMAT" = "json" ]; then
           status=$(echo "$out" | jq -r '.status // "failed"')
           exec_id=$(echo "$out" | jq -r '.execution_id // ""')
           summary=$(echo "$out" | jq -r '.result.summary // .pending_question.question // ""')

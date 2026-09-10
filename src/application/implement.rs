@@ -32,10 +32,7 @@ impl Capability for Implement {
     }
 
     fn prompt_fragment(&self) -> &'static str {
-        "Implement the user story below in this workspace. Inspect the relevant \
-         parts of the codebase first, make the smallest coherent set of changes \
-         that satisfies the story, and prefer the codebase's existing patterns \
-         and conventions over introducing new ones."
+        include_str!("../../prompts/capabilities/implement.md")
     }
 
     async fn execute(

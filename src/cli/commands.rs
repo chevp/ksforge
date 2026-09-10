@@ -38,6 +38,7 @@ pub async fn story_capability(capability_id: &str, args: StoryArgs) -> Result<i3
         model: common.model.clone(),
         max_budget_usd: common.max_budget_usd,
         dry_run: common.dry_run,
+        mcp_config: common.mcp_config.clone(),
     };
 
     output::eprint_notice(&format!(
@@ -65,6 +66,7 @@ pub async fn resume(args: ResumeArgs) -> Result<i32> {
         model: common.model.clone(),
         max_budget_usd: common.max_budget_usd,
         dry_run: common.dry_run,
+        mcp_config: common.mcp_config.clone(),
     };
 
     output::eprint_notice(&format!("Resuming {}...", args.execution_id));

@@ -32,6 +32,11 @@ pub struct AgentRequest {
     /// Resume an existing Claude Code conversation instead of starting a
     /// new one (see docs/06-human-in-the-loop.md).
     pub resume_session_id: Option<String>,
+    /// Path to a Claude Code `--mcp-config` file (its own JSON format, not
+    /// a ksforge one — see docs/11-integrations.md), passed through
+    /// unmodified together with `--strict-mcp-config`. `None` by default:
+    /// no MCP servers beyond Claude Code's own tools.
+    pub mcp_config: Option<PathBuf>,
 }
 
 /// What came back from one agent turn.

@@ -27,10 +27,7 @@ impl Capability for Explain {
     }
 
     fn prompt_fragment(&self) -> &'static str {
-        "The story names something to explain (a file, a module, a behavior). \
-         Read what is necessary to answer accurately and put a clear, concrete \
-         explanation in the summary field — cite actual file paths and symbols, \
-         not generic descriptions."
+        include_str!("../../prompts/capabilities/explain.md")
     }
 
     async fn execute(
