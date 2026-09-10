@@ -83,12 +83,18 @@ runs:
         else
           url="https://github.com/chevp/ksforge/releases/download/${version}/ksforge-linux-x86_64.tar.gz"
         fi
-        curl -sSfL "$url" -o /tmp/ksforge.tar.gz
-        curl -sSfL "$url.sha256" -o /tmp/ksforge.tar.gz.sha256 || true
-        if [ -s /tmp/ksforge.tar.gz.sha256 ]; then
-          (cd /tmp && sha256sum -c ksforge.tar.gz.sha256)
+        # Keep the local filename identical to the release asset name — the
+        # .sha256 file `release.yml` publishes records that exact name
+        # (`sha256sum "ksforge-linux-x86_64.tar.gz" > ...`), so renaming the
+        # download to something else (e.g. ksforge.tar.gz) makes `sha256sum
+        # -c` look for a file that was never downloaded under that name.
+        archive="ksforge-linux-x86_64.tar.gz"
+        curl -sSfL "$url" -o "/tmp/$archive"
+        curl -sSfL "$url.sha256" -o "/tmp/$archive.sha256" || true
+        if [ -s "/tmp/$archive.sha256" ]; then
+          (cd /tmp && sha256sum -c "$archive.sha256")
         fi
-        tar -xzf /tmp/ksforge.tar.gz -C /tmp
+        tar -xzf "/tmp/$archive" -C /tmp
         sudo install -m 0755 /tmp/ksforge /usr/local/bin/ksforge
 
     - name: Run ksforge
