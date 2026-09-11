@@ -249,8 +249,7 @@
     transform-origin: left;
     transition: transform 0.35s ease;
   }
-  .gate[aria-expanded="true"]::before,
-  .gate.lit::before { transform: scaleX(1); }
+  .gate[aria-expanded="true"]::before { transform: scaleX(1); }
   .gate .step-no { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
   .gate .name { font-family: var(--font-mono); font-weight: 600; font-size: 14.5px; letter-spacing: 0.02em; }
   .gate .who {
@@ -882,16 +881,6 @@
       detailPanel.classList.add("open");
     });
   });
-
-  /* hero rail load-in: light each gate's top edge in sequence, then settle */
-  if (!reduceMotion) {
-    gates.forEach(function (g, i) {
-      window.setTimeout(function () {
-        g.classList.add("lit");
-        window.setTimeout(function () { g.classList.remove("lit"); }, 550);
-      }, 140 * i + 120);
-    });
-  }
 
   /* trace terminal */
   var traceLines = [
