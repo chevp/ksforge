@@ -9,6 +9,12 @@ a capability picks *what ksforge is doing* (implement/review/fix/explain);
 an integration only adds *tools* (an MCP server) to whichever capability
 is running.
 
+Also not a capability: `ksforge coordinate` (04-cli-reference.md). It
+doesn't go through `application::execute::run`, `domain::Capability`, or
+any of the shared tool-scope/constraint machinery on this page — it's a
+separate, read-only analysis command with its own Core prompt
+(`prompts/coordinator/system-prompt.md`), see `application::coordinate`.
+
 | Capability | Tools | Writes? | Human-in-the-loop? |
 |---|---|---|---|
 | `implement` | default (full) | yes | yes |

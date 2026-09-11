@@ -84,24 +84,78 @@ impl ExecutionStore {
         })?;
         Ok(serde_json::from_str(&json)?)
     }
+
+    /// Every `Execution` currently on disk under this store, for the
+    /// coordination agent (`application::coordinate`) to build a picture of
+    /// concurrent work from — see `prompts/coordinator/system-prompt.md`
+    /// §4/§10/§11. A missing or unreadable `state.json` in one execution's
+    /// directory is skipped rather than failing the whole scan (a
+    /// partially written file from a concurrent run is expected, not
+    /// corruption to surface as an error).
+    pub fn list_all(&self) -> Result<Vec<Execution>> {
+        let Ok(entries) = std::fs::read_dir(&self.root) else {
+            return Ok(Vec::new());
+        };
+        let mut executions = Vec::new();
+        for entry in entries.filter_map(|e| e.ok()) {
+            let state_path = entry.path().join("state.json");
+            let Ok(json) = std::fs::read_to_string(&state_path) else {
+                continue;
+            };
+            if let Ok(execution) = serde_json::from_str(&json) {
+                executions.push(execution);
+            }
+        }
+        Ok(executions)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::UserStory;
+    use crate::domain::ChangeRequest;
 
     #[test]
     fn round_trips_through_disk() {
         let dir = tempfile::tempdir().unwrap();
         let store = ExecutionStore::new(dir.path());
-        let execution =
-            Execution::start(UserStory::from_text("As a user...").unwrap(), "implement");
+        let execution = Execution::start(
+            ChangeRequest::from_text("As a user...").unwrap(),
+            "implement",
+        );
         store.save(&execution).unwrap();
 
         let loaded = store.load(&execution.id).unwrap();
         assert_eq!(loaded.id, execution.id);
         assert_eq!(loaded.status, execution.status);
+    }
+
+    #[test]
+    fn list_all_returns_every_saved_execution() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ExecutionStore::new(dir.path());
+        let a = Execution::start(
+            ChangeRequest::from_text("As a user, X.").unwrap(),
+            "implement",
+        );
+        let b = Execution::start(ChangeRequest::from_text("As a user, Y.").unwrap(), "fix");
+        store.save(&a).unwrap();
+        store.save(&b).unwrap();
+
+        let ids: std::collections::HashSet<_> = store
+            .list_all()
+            .unwrap()
+            .into_iter()
+            .map(|e| e.id)
+            .collect();
+        assert_eq!(ids, [a.id, b.id].into_iter().collect());
+    }
+
+    #[test]
+    fn list_all_on_an_empty_store_is_an_empty_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ExecutionStore::new(dir.path());
+        assert!(store.list_all().unwrap().is_empty());
     }
 
     #[test]

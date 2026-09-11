@@ -1,4 +1,4 @@
-//! `ksforge` — turns user stories into controlled, resumable Claude Code
+//! `ksforge` — turns change requests into controlled, resumable Claude Code
 //! workflows. See docs/03-architecture.md for the layering this crate
 //! follows: `domain` (vocabulary) → `agent` (execution-engine port) →
 //! `application` (the shared pipeline + one `Capability` impl per verb) →

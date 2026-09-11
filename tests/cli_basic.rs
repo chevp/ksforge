@@ -36,7 +36,7 @@ fn capabilities_lists_all_four() {
 }
 
 #[test]
-fn implement_without_story_is_usage_error_exit_2() {
+fn implement_without_change_request_is_usage_error_exit_2() {
     let dir = tempfile::tempdir().unwrap();
     ksforge()
         .current_dir(dir.path())
@@ -44,7 +44,7 @@ fn implement_without_story_is_usage_error_exit_2() {
         .assert()
         .failure()
         .code(2)
-        .stderr(predicate::str::contains("--story"));
+        .stderr(predicate::str::contains("--change-request"));
 }
 
 #[test]
@@ -88,15 +88,21 @@ fn handle_comment_without_choose_command_is_usage_error_exit_2() {
         .assert()
         .failure()
         .code(2)
-        .stderr(predicate::str::contains("/ksforge choose"));
+        .stderr(predicate::str::contains("does not contain a recognized"));
 }
 
 #[test]
-fn story_and_story_file_are_mutually_exclusive() {
+fn change_request_and_change_request_file_are_mutually_exclusive() {
     let dir = tempfile::tempdir().unwrap();
     ksforge()
         .current_dir(dir.path())
-        .args(["implement", "--story", "a", "--story-file", "b.md"])
+        .args([
+            "implement",
+            "--change-request",
+            "a",
+            "--change-request-file",
+            "b.md",
+        ])
         .assert()
         .failure()
         .code(2);

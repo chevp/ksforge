@@ -9,7 +9,7 @@ explain, see [05-capabilities.md](05-capabilities.md)); it only adds tools.
 ## Using one
 
 ```bash
-ksforge implement --story "..." --mcp-config path/to/mcp-config.json
+ksforge implement --change-request "..." --mcp-config path/to/mcp-config.json
 ```
 
 `--mcp-config <path>` is passed straight through to `claude -p
@@ -57,7 +57,7 @@ ad-hoc paths per invocation).
 ```yaml
 - uses: chevp/ksforge@v1
   with:
-    story: ${{ inputs.story }}
+    change-request: ${{ inputs.change-request }}
     mcp-config: .github/ksforge/mcp-config.json
 ```
 

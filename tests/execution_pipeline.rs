@@ -3,15 +3,15 @@ use std::sync::Arc;
 use ksforge::agent::MockAgentExecutor;
 use ksforge::application::implement::Implement;
 use ksforge::domain::{
-    Capability, CapabilityRegistry, ExecutionContext, ExecutionStatus, ImplementationRequest,
-    UserStory, ValidationPolicy,
+    Capability, CapabilityRegistry, ChangeRequest, ExecutionContext, ExecutionStatus,
+    ImplementationRequest, ValidationPolicy,
 };
 use ksforge::workspace::ExecutionStore;
 use serde_json::json;
 
 fn request(workspace: &std::path::Path) -> ImplementationRequest {
     ImplementationRequest {
-        story: UserStory::from_text("As a user, I want to log in.").unwrap(),
+        change_request: ChangeRequest::from_text("As a user, I want to log in.").unwrap(),
         workspace: workspace.to_path_buf(),
         capability: "implement".to_string(),
         constraints: Vec::new(),

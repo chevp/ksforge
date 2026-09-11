@@ -3,7 +3,7 @@
 ## What ksforge is, and isn't
 
 ```text
-ksforge  = orchestration / product layer: story, capability, policy,
+ksforge  = orchestration / product layer: change request, capability, policy,
            workflow, durable execution state, GitHub integration.
 
 Claude Code = the default coding/agent execution engine. Owns repository
@@ -18,14 +18,14 @@ GitHub Actions = an automation runtime ksforge targets. Not the domain.
 ksforge does not implement a coding agent, a repository indexer, a
 tool-calling loop, or a context manager. All of that is the spawned CLI's
 job — Claude Code by default, or the Codex CLI via `--engine codex`.
-ksforge's job is turning a user story into a controlled request for that
+ksforge's job is turning a change request into a controlled request for that
 CLI to act on, and turning what comes back into something trustworthy and
 resumable.
 
 ## Module layering
 
 ```text
-domain          vocabulary: UserStory, Capability, Constraint,
+domain          vocabulary: ChangeRequest, Capability, Constraint,
                  ImplementationRequest, Execution, ExecutionResult.
                  No knowledge of Claude Code's CLI flags or of Git.
 
@@ -44,10 +44,10 @@ application      the one shared pipeline (execute::run, resume::resume)
 workspace        filesystem concerns: resolving the workspace root,
                  dry-run isolation, change detection (content hashing,
                  no Git dependency), Execution persistence under
-                 .ksforge/executions/<id>/, and the story archive
-                 (raw story text as markdown + a JSON record, id
-                 `US-<base62>` — random, no shared counter, so concurrent
-                 runs never collide) under .ksforge/user-stories/.
+                 .ksforge/executions/<id>/, and the change request archive
+                 (raw change request text as markdown + a JSON record, id
+                 `CR-<base62>` — random, no shared counter, so concurrent
+                 runs never collide) under .ksforge/change-requests/.
 
 validation       runs user-supplied shell commands after Claude Code
                  reports success, before ksforge trusts the result.
@@ -89,6 +89,14 @@ prompts/
     fix.md, explain.md          One capability-specific instruction
                                  fragment each; `Capability::prompt_fragment`
                                  is just `include_str!` of its own file.
+  coordinator/
+    system-prompt.md            A separate Core for `ksforge coordinate`
+                                 (`application::coordinate`) — its own
+                                 role (analyze overlap between concurrent
+                                 executions, never implement anything),
+                                 not one more capability fragment, so it
+                                 does not share §1-§8 or the policies
+                                 above with implement/review/fix/explain.
 ```
 
 These are embedded into the binary at compile time via `include_str!`
@@ -145,7 +153,7 @@ live `claude -p` invocation in this environment (that would spend real API
 budget from inside an unattended build) — it matches Claude Code's
 documented convention, and `ClaudeCodeExecutor`'s envelope parser ignores
 unknown fields so a version drift there degrades gracefully rather than
-hard-failing, but do one real smoke test (`ksforge implement --story "..."
+hard-failing, but do one real smoke test (`ksforge implement --change-request "..."
 --dry-run` against a throwaway repo) before trusting this in CI.
 
 ## Change detection has no Git dependency

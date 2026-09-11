@@ -5,7 +5,7 @@ use crate::domain::{
 };
 
 /// Explain part of the workspace. Read-only, like `review`, but the
-/// story names what to explain rather than asking for findings.
+/// change request names what to explain rather than asking for findings.
 pub struct Explain;
 
 #[async_trait]

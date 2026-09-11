@@ -2,7 +2,7 @@
 
 A change must build and pass the project's own checks, using the repository's existing
 language, module, and dependency conventions. No unnecessary dependencies. No new
-abstractions unless the story genuinely requires them.
+abstractions unless the change request genuinely requires them.
 
 ---
 
@@ -59,9 +59,10 @@ below (only relevant on `waiting_for_human`); leave both unset when there is gen
 defensible preference, and say why in `recommendation` rather than omitting it silently.
 
 `title` is a short, standalone headline for the change — the same register as a good commit
-subject line: imperative mood ("Add ...", "Fix ...", not "Added"/"Fixes"), under ~70
-characters, no trailing period, no restating "implement"/"fix"/the capability name (ksforge
-already prefixes that). It is placed verbatim into the pull request title and commit subject
-when `--create-pull-request` is set, so it must stand on its own without the rest of `summary`
-for context. Always set it on `completed` when you made changes; omit it for `review`/
-`explain` (nothing gets a PR) and for `waiting_for_human`/`failed`.
+subject line: imperative mood ("Add ...", "Fix ...", not "Added"/"Fixes"), **about 5 words**,
+no trailing period, no restating "implement"/"fix"/the capability name (ksforge already
+prefixes that). It is placed verbatim into the pull request title and commit subject when
+`--create-pull-request`/`--push-to-branch` is set, so it must stand on its own without the
+rest of `summary` for context — but stay terse; this is a headline, not a second summary.
+Always set it on `completed` when you made changes; omit it for `review`/`explain` (nothing
+gets a PR) and for `waiting_for_human`/`failed`.

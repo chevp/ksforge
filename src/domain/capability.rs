@@ -21,7 +21,7 @@ pub enum ToolPolicy {
     ReadWrite,
 }
 
-/// Everything a capability needs to actually run: where the story runs, and
+/// Everything a capability needs to actually run: where the change request runs, and
 /// the port to the execution engine. Composes agent + workspace/config —
 /// deliberately outside pure domain purity for a CLI this size (section 6).
 #[derive(Clone)]

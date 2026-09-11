@@ -7,7 +7,7 @@ Assumes ksforge and `claude` are both installed and on your `PATH` — see
 export ANTHROPIC_API_KEY=...   # or however Claude Code auth is configured
 
 cd your-project
-ksforge implement --story "As a user, I want to reset my password via email."
+ksforge implement --change-request "As a user, I want to reset my password via email."
 ```
 
 What happens:
@@ -17,8 +17,8 @@ What happens:
 2. It spawns `claude -p` with a system prompt carrying ksforge's policy
    (constraints, capability instructions — see
    [docs/03-architecture.md](docs/03-architecture.md#prompt-structure))
-   and a user prompt carrying your story, and lets Claude Code explore and
-   edit the workspace directly.
+   and a user prompt carrying your change request, and lets Claude Code
+   explore and edit the workspace directly.
 3. Claude Code either finishes (ksforge then diffs the workspace to see
    what actually changed) or reports it needs a decision.
 4. If you passed `--validate <cmd>`, ksforge runs those commands before
@@ -28,7 +28,7 @@ What happens:
 ## Try it safely first
 
 ```bash
-ksforge implement --story "..." --dry-run
+ksforge implement --change-request "..." --dry-run
 ```
 
 Runs against an isolated temporary copy of your workspace — nothing is
@@ -39,7 +39,7 @@ written back to the real one.
 ```bash
 ksforge review .                       # findings only, never writes
 ksforge explain src/auth.rs            # explanation only, never writes
-ksforge fix --story "Login times out after 30s under load"
+ksforge fix --change-request "Login times out after 30s under load"
 ksforge capabilities                   # list what's available
 ```
 

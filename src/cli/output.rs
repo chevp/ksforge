@@ -1,8 +1,42 @@
 use serde_json::json;
 
+use crate::agent::CoordinationDecision;
 use crate::domain::{Execution, ExecutionStatus};
 
 use super::args::OutputFormat;
+
+/// Print a `ksforge coordinate` result. Same `Json`/`Text` contract as
+/// [`print_execution`] — not an `Execution` (this command never starts
+/// one), so it gets its own small printer instead of reusing that one.
+pub fn print_coordination_decision(decision: &CoordinationDecision, format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            println!("{}", serde_json::to_string(decision).unwrap());
+        }
+        OutputFormat::Text => {
+            println!();
+            println!("Classification: {:?}", decision.classification);
+            println!("Proceed: {}", if decision.proceed { "YES" } else { "NO" });
+            print_bullets("Affected scope", &decision.affected_scope);
+            print_bullets("Related executions", &decision.related_executions);
+            print_bullets("Dependencies", &decision.dependencies);
+            print_bullets("Conflicts", &decision.conflicts);
+            print_bullets("Recommendations", &decision.recommendations);
+            println!();
+        }
+    }
+}
+
+fn print_bullets(label: &str, items: &[String]) {
+    if items.is_empty() {
+        return;
+    }
+    println!();
+    println!("{label}:");
+    for item in items {
+        println!("  - {item}");
+    }
+}
 
 /// Print a finished or paused execution. In `Json` mode stdout carries
 /// exactly one JSON object and nothing else (section 24); in `Text` mode
@@ -37,10 +71,10 @@ fn print_human(execution: &Execution) {
     println!("Capability:");
     println!("  {}", execution.capability);
     println!();
-    println!("User story:");
+    println!("Change request:");
     println!(
         "  {}",
-        execution.user_story.text.lines().next().unwrap_or("")
+        execution.change_request.text.lines().next().unwrap_or("")
     );
     println!();
     println!("Execution: {}", execution.id);

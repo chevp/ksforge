@@ -1,5 +1,8 @@
 # GitHub Actions
 
+Ready-to-copy template for the primary flow below:
+[examples/workflows/change-request-to-ksforge.yml](../examples/workflows/change-request-to-ksforge.yml).
+
 ## Prerequisite: let Actions open pull requests
 
 `create-pull-request: "true"` needs more than `permissions:
@@ -35,13 +38,13 @@ Not needed for `review`/`explain` or any run with `create-pull-request:
 ## Primary example: `workflow_dispatch`
 
 ```yaml
-name: Implement User Story
+name: Implement Change Request
 
 on:
   workflow_dispatch:
     inputs:
-      story:
-        description: "User story"
+      change-request:
+        description: "Change request"
         required: true
         type: string
 
@@ -58,7 +61,7 @@ jobs:
       - uses: chevp/ksforge@v1
         id: ksforge
         with:
-          story: ${{ inputs.story }}
+          change-request: ${{ inputs.change-request }}
           capability: implement
           create-pull-request: "true"
         env:
@@ -84,7 +87,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: chevp/ksforge@v1
         with:
-          story: "Review this pull request's diff for correctness issues."
+          change-request: "Review this pull request's diff for correctness issues."
           capability: review
           create-pull-request: "false"
           format: json
@@ -102,13 +105,13 @@ describes: cache `.ksforge/` between the initial run and the resume run so
 `agent_session_id` (and therefore `claude --resume`) survives the gap.
 
 ```yaml
-name: Implement User Story (resumable)
+name: Implement Change Request (resumable)
 
 on:
   workflow_dispatch:
     inputs:
-      story:
-        description: "User story (leave empty when resuming)"
+      change-request:
+        description: "Change request (leave empty when resuming)"
         required: false
         type: string
       execution-id:
@@ -140,7 +143,7 @@ jobs:
       - uses: chevp/ksforge@v1
         id: ksforge
         with:
-          story: ${{ inputs.story }}
+          change-request: ${{ inputs.change-request }}
           execution-id: ${{ inputs.execution-id }}
           decision: ${{ inputs.decision }}
           create-pull-request: "true"
@@ -253,9 +256,119 @@ option — the workflow simply doesn't reach `resume` in any of those cases,
 matching "never resume solely because a comment resembles a decision"
 (security section, spec §16).
 
+## Comment-driven follow-up: free-text PR comments
+
+The two flows above only ever act on the change request ksforge originally
+received. This lets an authorized collaborator ask for *more* on an
+already-open PR — a plain comment like `/ksforge fix the button is
+misaligned on mobile` — by running that capability against the PR's own
+branch and pushing the result back onto it, instead of opening a second
+PR. `ksforge handle-comment` (called without `--execution-id` this time)
+recognizes this shape too — see [09-security.md](09-security.md) for the
+authorization rules it applies before acting on one.
+
+```yaml
+name: ksforge PR follow-up
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  follow-up:
+    # Same gate as "Comment-driven resume" above — a fast filter, not the
+    # only check; ksforge re-verifies the commenter independently.
+    if: >
+      github.event.issue.pull_request != null &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve the PR's own head branch
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          ref=$(gh pr view "$PR_NUMBER" --json headRefName -q .headRefName)
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.ref }}
+          fetch-depth: 0
+
+      # This job calls several ksforge subcommands, not one capability, so
+      # (like "Comment-driven resume" above) it installs the binary
+      # directly instead of going through the composite action.
+      - name: Install ksforge
+        run: |
+          curl -sSfL https://github.com/chevp/ksforge/releases/latest/download/ksforge-linux-x86_64.tar.gz \
+            | tar -xz
+          sudo install -m 0755 ksforge /usr/local/bin/ksforge
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      # Untrusted values (the comment body especially) go through `env:`
+      # here, never interpolated directly into the script body — same
+      # reasoning as the comment in action.yml's own run step.
+      - name: Classify the comment
+        id: handle
+        env:
+          COMMENT_ID: ${{ github.event.comment.id }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          set +e
+          capability=$(ksforge handle-comment \
+            --comment-id "$COMMENT_ID" \
+            --commenter "$COMMENTER" \
+            --body "$COMMENT_BODY")
+          echo "capability=$capability" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Run the requested capability
+        if: steps.handle.outputs.capability != ''
+        id: run
+        env:
+          CAPABILITY: ${{ steps.handle.outputs.capability }}
+          CHANGE_REQUEST: ${{ steps.handle.outputs.change_request }}
+        run: |
+          set -euo pipefail
+          out=$(ksforge "$CAPABILITY" --change-request "$CHANGE_REQUEST" --push-to-branch --format json)
+          echo "$out"
+          echo "execution-id=$(echo "$out" | jq -r '.execution_id')" >> "$GITHUB_OUTPUT"
+
+      - name: Post a report comment
+        if: steps.handle.outputs.capability != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ksforge post-report "${{ steps.run.outputs.execution-id }}" \
+            --pr "${{ github.event.issue.number }}"
+```
+
+An ordinary, unrelated PR comment makes `handle-comment` exit non-zero and
+`capability` stay empty — `set +e` there keeps that from failing the job;
+the two steps after it are simply skipped (`if: steps.handle.outputs.capability != ''`),
+the same idiom "Comment-driven resume" uses for `steps.exec.outputs.id`.
+
+`--push-to-branch` (instead of `--create-pull-request`) is what makes this
+update the PR already open on `steps.pr.outputs.ref` rather than opening a
+second one — see [`github::pull_request::push_follow_up`], and
+[09-security.md](09-security.md) for why the authorization check here
+matters more than it does for `/ksforge choose`: this starts a brand new,
+write-capable, billed run from arbitrary comment text, not a pick among
+options the agent already offered.
+
 ## Inputs / outputs
 
-See `action.yml` for the authoritative list. Highlights: `story` xor
+See `action.yml` for the authoritative list. Highlights: `change-request` xor
 `execution-id`+`decision`; `dry-run` defaults to `false` at the action
 layer (unlike leaving it implicit) so a workflow author has to opt in
 explicitly to real writes either way, matching whatever they set. Outputs

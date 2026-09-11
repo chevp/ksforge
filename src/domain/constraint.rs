@@ -30,7 +30,7 @@ pub fn baseline_constraints() -> Vec<Constraint> {
         ),
         Constraint::new(
             "avoid-unrelated-changes",
-            "Do not modify files unrelated to the user story.",
+            "Do not modify files unrelated to the change request.",
         ),
         Constraint::new(
             "no-secret-exposure",
@@ -38,7 +38,7 @@ pub fn baseline_constraints() -> Vec<Constraint> {
         ),
         Constraint::new(
             "no-arbitrary-dependencies",
-            "Do not install or add dependencies unless the story requires it.",
+            "Do not install or add dependencies unless the change request requires it.",
         ),
     ]
 }
@@ -47,7 +47,7 @@ pub fn write_constraints() -> Vec<Constraint> {
     let mut c = baseline_constraints();
     c.push(Constraint::new(
         "preserve-public-api",
-        "Preserve existing public APIs unless the story explicitly requires changing them.",
+        "Preserve existing public APIs unless the change request explicitly requires changing them.",
     ));
     c.push(Constraint::new(
         "run-existing-tests",

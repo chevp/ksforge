@@ -4,7 +4,7 @@ use crate::domain::{
     Capability, Constraint, Execution, ExecutionContext, ImplementationRequest, Result, ToolPolicy,
 };
 
-/// Implement a user story end to end: analyze, plan, modify, validate. The
+/// Implement a change request end to end: analyze, plan, modify, validate. The
 /// primary capability (section 8) and the only one with full
 /// human-in-the-loop depth by default.
 pub struct Implement;
@@ -16,7 +16,7 @@ impl Capability for Implement {
     }
 
     fn description(&self) -> &'static str {
-        "Implement a user story in the current workspace."
+        "Implement a change request in the current workspace."
     }
 
     fn tool_policy(&self) -> ToolPolicy {

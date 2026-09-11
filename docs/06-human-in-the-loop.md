@@ -12,7 +12,7 @@ function call.
 
 ```text
 Workflow run 1                          Workflow run 2 (later, separate)
-User story                              execution-id + decision
+Change request                              execution-id + decision
   |                                        |
 ksforge implement                       ksforge resume
   |                                        |
@@ -118,8 +118,8 @@ disappears the moment a job ends. Two complementary answers:
      the strongest option when available; or
    - reconstructing just enough by hand: `ksforge resume` degrades
      gracefully when there's no cached `agent_session_id` by starting a
-     fresh Claude Code turn that states the original story, the question
-     that was asked, and the decision, and asks it to continue — less
+     fresh Claude Code turn that states the original change request, the
+     question that was asked, and the decision, and asks it to continue — less
      context than a true resumed conversation, but functional.
 
    A ready-to-copy two-job example (start → cache → resume) is in

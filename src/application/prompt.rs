@@ -19,8 +19,8 @@ const HUMAN_IN_THE_LOOP: &str = include_str!("../../prompts/fragments/human-in-t
 /// The one place prompt text gets assembled (section 19/11: never scatter
 /// prompt construction across CLI commands). Produces a `(system_prompt,
 /// user_prompt)` pair; `system_prompt` carries policy that must not be
-/// overridable by story/repo text (section 34), `user_prompt` carries the
-/// story and capability-specific instructions.
+/// overridable by change-request/repo text (section 34), `user_prompt` carries the
+/// change request and capability-specific instructions.
 pub fn build(capability: &dyn Capability, request: &ImplementationRequest) -> (String, String) {
     let system_prompt = system_prompt(capability, &request.constraints);
     let user_prompt = user_prompt(capability, request);
@@ -58,8 +58,8 @@ fn system_prompt(capability: &dyn Capability, constraints: &[Constraint]) -> Str
 
 fn user_prompt(_capability: &dyn Capability, request: &ImplementationRequest) -> String {
     format!(
-        "User story:\n{}\n\nWorkspace: {}\n",
-        request.story.text,
+        "Change request:\n{}\n\nWorkspace: {}\n",
+        request.change_request.text,
         request.workspace.display()
     )
 }

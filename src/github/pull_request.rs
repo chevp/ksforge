@@ -72,6 +72,44 @@ pub async fn create_from_execution(
     }))
 }
 
+/// Commits the execution's changed files directly onto the *currently
+/// checked-out* branch and pushes — for a PR follow-up run (`ksforge
+/// handle-comment` classifies a `/ksforge implement|fix <change-request>` comment,
+/// then a normal `ksforge implement`/`ksforge fix --push-to-branch` call
+/// runs it against a checkout of the PR's own head branch), which must
+/// update that existing PR rather than open a new one the way
+/// `create_from_execution` does. Returns `Ok(None)` for the same
+/// "nothing to do" cases as `create_from_execution`; the caller (`ksforge
+/// post-report --pr <number>`) posts/updates the PR comment separately.
+pub async fn push_follow_up(
+    workspace_root: &Path,
+    execution: &Execution,
+) -> Result<Option<String>> {
+    if execution.status != ExecutionStatus::Completed {
+        return Ok(None);
+    }
+    let Some(result) = &execution.result else {
+        return Ok(None);
+    };
+    if result.changed_files.is_empty() {
+        return Ok(None);
+    }
+
+    let mut add_args: Vec<String> = vec!["add".into(), "--".into()];
+    add_args.extend(result.changed_files.iter().map(|p| p.display().to_string()));
+    run_git(
+        workspace_root,
+        &add_args.iter().map(String::as_str).collect::<Vec<_>>(),
+    )
+    .await?;
+
+    let title = pull_request_title(&execution.capability, result);
+    run_git(workspace_root, &["commit", "-m", &title]).await?;
+    run_git(workspace_root, &["push"]).await?;
+
+    Ok(Some(title))
+}
+
 /// Prefers the agent's own headline (`AgentOutcome::title`) — a clean,
 /// standalone commit-subject-style line — over a truncated `summary`
 /// sentence fragment; the latter only exists as a fallback for an older or
@@ -103,11 +141,11 @@ fn pr_body(execution: &Execution) -> String {
         })
         .unwrap_or("not configured");
     // One compact metadata line instead of three stacked "Key: value"
-    // lines — the story itself is the part worth reading, this footer is
+    // lines — the change request itself is the part worth reading, this footer is
     // just provenance.
     format!(
-        "## Story\n\n{}\n\n---\n`{}` · `{}` · validation: {validation}",
-        execution.user_story.text.trim(),
+        "## Change Request\n\n{}\n\n---\n`{}` · `{}` · validation: {validation}",
+        execution.change_request.text.trim(),
         execution.capability,
         execution.id,
     )
@@ -132,13 +170,13 @@ fn truncate(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{UserStory, ValidationOutcome};
+    use crate::domain::{ChangeRequest, ValidationOutcome};
 
     fn result_with_title(title: Option<&str>) -> ExecutionResult {
         ExecutionResult {
             success: true,
             title: title.map(String::from),
-            summary: "Added a '## User Stories einreichen' section to README, describing how to submit a story via the workflow.".into(),
+            summary: "Added a '## Change Requests einreichen' section to README, describing how to submit a change request via the workflow.".into(),
             changed_files: vec!["README.md".into()],
             validation: ValidationOutcome::default(),
             completed: Vec::new(),
@@ -149,10 +187,10 @@ mod tests {
 
     #[test]
     fn prefers_the_agents_own_title() {
-        let result = result_with_title(Some("Document user story submission in README"));
+        let result = result_with_title(Some("Document change request submission in README"));
         assert_eq!(
             pull_request_title("implement", &result),
-            "[implement] Document user story submission in README"
+            "[implement] Document change request submission in README"
         );
     }
 
@@ -161,7 +199,7 @@ mod tests {
         let result = result_with_title(None);
         assert_eq!(
             pull_request_title("implement", &result),
-            "[implement] Added a '## User Stories einreichen' section to README, desc..."
+            "[implement] Added a '## Change Requests einreichen' section to README, d..."
         );
     }
 
@@ -174,13 +212,45 @@ mod tests {
     #[test]
     fn body_has_one_compact_metadata_line_not_three() {
         let mut execution = Execution::start(
-            UserStory::from_text("As a user, I want X.").unwrap(),
+            ChangeRequest::from_text("As a user, I want X.").unwrap(),
             "implement",
         );
-        execution.complete(result_with_title(Some("Document user story submission")));
+        execution.complete(result_with_title(Some(
+            "Document change request submission",
+        )));
 
         let body = pr_body(&execution);
-        assert!(body.starts_with("## Story\n\nAs a user, I want X.\n\n---\n"));
+        assert!(body.starts_with("## Change Request\n\nAs a user, I want X.\n\n---\n"));
         assert_eq!(body.lines().last().unwrap().matches('·').count(), 2);
+    }
+
+    #[tokio::test]
+    async fn push_follow_up_is_a_noop_before_the_execution_completes() {
+        let execution = Execution::start(
+            ChangeRequest::from_text("As a user, I want X.").unwrap(),
+            "fix",
+        );
+        // Still `Running` — never reaches a git command, so no real repo
+        // is needed at `workspace_root` for this case.
+        let result = push_follow_up(Path::new("/does/not/exist"), &execution)
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn push_follow_up_is_a_noop_with_no_changed_files() {
+        let mut execution = Execution::start(
+            ChangeRequest::from_text("As a user, I want X.").unwrap(),
+            "fix",
+        );
+        let mut result = result_with_title(Some("Nothing to change"));
+        result.changed_files = Vec::new();
+        execution.complete(result);
+
+        let result = push_follow_up(Path::new("/does/not/exist"), &execution)
+            .await
+            .unwrap();
+        assert!(result.is_none());
     }
 }

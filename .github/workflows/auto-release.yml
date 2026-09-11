@@ -1,0 +1,62 @@
+name: Auto release on merge
+
+# Every PR merged into main gets an automatic patch release — replaces the
+# manual "bump Cargo.toml, tag, push" routine a human would otherwise have
+# to repeat after each merge. Pushing the resulting `v*` tag is what
+# actually triggers release.yml's build-and-publish job; this workflow
+# only computes and pushes that tag.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: >
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure git identity
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump patch version in Cargo.toml
+        id: bump
+        run: |
+          set -euo pipefail
+          current=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "([^"]*)"/\1/')
+          IFS='.' read -r major minor patch <<< "$current"
+          next="$major.$minor.$((patch + 1))"
+          sed -i "0,/^version = \"$current\"\$/s//version = \"$next\"/" Cargo.toml
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Refresh Cargo.lock
+        run: cargo check
+
+      - name: Commit, tag, and push
+        env:
+          NEXT_VERSION: ${{ steps.bump.outputs.version }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          git add Cargo.toml Cargo.lock
+          git commit -m "Bump version to $NEXT_VERSION"
+          git tag -a "v$NEXT_VERSION" -m "ksforge v$NEXT_VERSION (auto-released after merging #$PR_NUMBER)"
+          git push origin main
+          git push origin "v$NEXT_VERSION"

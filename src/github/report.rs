@@ -216,16 +216,16 @@ fn decision_history(execution: &Execution) -> Vec<(&HumanDecisionRequest, &str)>
 mod tests {
     use super::*;
     use crate::domain::{
-        DecisionOption, Execution, ExecutionResult, HumanDecision, UserStory, ValidationOutcome,
+        ChangeRequest, DecisionOption, Execution, ExecutionResult, HumanDecision, ValidationOutcome,
     };
 
-    fn story() -> UserStory {
-        UserStory::from_text("As a user, I want password reset.").unwrap()
+    fn change_request() -> ChangeRequest {
+        ChangeRequest::from_text("As a user, I want password reset.").unwrap()
     }
 
     #[test]
     fn waiting_report_carries_marker_and_recommendation() {
-        let mut exec = Execution::start(story(), "implement");
+        let mut exec = Execution::start(change_request(), "implement");
         exec.ask(
             "OAuth2 or JWT?".into(),
             vec![
@@ -255,7 +255,7 @@ mod tests {
 
     #[test]
     fn waiting_report_without_recommendation_says_so() {
-        let mut exec = Execution::start(story(), "implement");
+        let mut exec = Execution::start(change_request(), "implement");
         exec.ask(
             "Postgres or MySQL?".into(),
             vec![DecisionOption {
@@ -274,7 +274,7 @@ mod tests {
 
     #[test]
     fn completed_report_lists_decisions_and_no_further_action() {
-        let mut exec = Execution::start(story(), "implement");
+        let mut exec = Execution::start(change_request(), "implement");
         exec.ask(
             "OAuth2 or JWT?".into(),
             vec![DecisionOption {
@@ -310,7 +310,7 @@ mod tests {
 
     #[test]
     fn failed_report_shows_summary() {
-        let mut exec = Execution::start(story(), "implement");
+        let mut exec = Execution::start(change_request(), "implement");
         exec.fail("validate.sh failed");
         let body = render(&exec);
         assert!(body.contains("Failed: validate.sh failed"));

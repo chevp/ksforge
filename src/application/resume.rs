@@ -10,7 +10,7 @@ use crate::workspace::{self, ExecutionStore};
 /// resuming the original Claude Code conversation via `--resume
 /// <session_id>` (full context, when the session is still on disk or was
 /// restored from a cache — see docs/06); falls back to a fresh turn that
-/// states the story and the decision explicitly when no session id was
+/// states the change request and the decision explicitly when no session id was
 /// recorded (e.g. a `MockAgentExecutor` in tests, or a cross-machine
 /// resume with no cached session store).
 pub async fn resume(

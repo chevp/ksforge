@@ -3,7 +3,7 @@ use crate::domain::{
     Capability, DecisionOption, Execution, ExecutionContext, ExecutionEvent, ExecutionResult,
     ImplementationRequest, KsforgeError, Result, ToolPolicy, ValidationOutcome,
 };
-use crate::workspace::{self, ExecutionStore, StoryArchive};
+use crate::workspace::{self, ChangeRequestArchive, ExecutionStore};
 use crate::{application::prompt, validation};
 
 /// The one execution pipeline shared by every capability (section 19: don't
@@ -16,14 +16,18 @@ pub async fn run(
     context: ExecutionContext,
 ) -> Result<Execution> {
     let store = ExecutionStore::new(&request.workspace);
-    let mut execution = Execution::start(request.story.clone(), capability.id());
+    let mut execution = Execution::start(request.change_request.clone(), capability.id());
     store.save_request(&execution.id, &request)?;
     store.save(&execution)?;
 
-    // ksforge itself owns turning the raw story text into a durable
-    // markdown + numbered-JSON record (section: story archive) — callers
-    // (e.g. the GitHub Action) only ever hand it a plain string.
-    StoryArchive::new(&request.workspace).record(&request.story, capability.id(), &execution.id)?;
+    // ksforge itself owns turning the raw change request text into a durable
+    // markdown + numbered-JSON record (section: change request archive) —
+    // callers (e.g. the GitHub Action) only ever hand it a plain string.
+    ChangeRequestArchive::new(&request.workspace).record(
+        &request.change_request,
+        capability.id(),
+        &execution.id,
+    )?;
 
     let isolated = if context.dry_run {
         Some(workspace::isolate::prepare(&request.workspace)?)

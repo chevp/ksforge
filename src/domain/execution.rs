@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::story::UserStory;
+use super::change_request::ChangeRequest;
 
 /// Identifier for a persisted [`Execution`]. Format: `ksf_<uuidv4 simple>`,
 /// e.g. `ksf_2f8b6a1c9d3e4f5a8b7c6d5e4f3a2b1c`. Not a Git concept — purely a
@@ -222,13 +222,13 @@ pub struct ExecutionResult {
     pub recommendation: Option<String>,
 }
 
-/// A running or paused unit of orchestration work: a user story being
+/// A running or paused unit of orchestration work: a change request being
 /// carried out under a capability. Durable so it can cross a process
-/// boundary (a GitHub Actions job ending mid-story) — see docs/06.
+/// boundary (a GitHub Actions job ending mid-change-request) — see docs/06.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Execution {
     pub id: ExecutionId,
-    pub user_story: UserStory,
+    pub change_request: ChangeRequest,
     pub capability: String,
     pub status: ExecutionStatus,
     pub current_step: String,
@@ -252,12 +252,12 @@ pub struct Execution {
 }
 
 impl Execution {
-    pub fn start(user_story: UserStory, capability: impl Into<String>) -> Self {
+    pub fn start(change_request: ChangeRequest, capability: impl Into<String>) -> Self {
         let now = Utc::now();
         let capability = capability.into();
         let mut execution = Self {
             id: ExecutionId::new(),
-            user_story,
+            change_request,
             capability: capability.clone(),
             status: ExecutionStatus::Running,
             current_step: "started".into(),
@@ -389,8 +389,8 @@ mod tests {
 
     #[test]
     fn waiting_for_human_round_trips_pending_question() {
-        let story = UserStory::from_text("As a user...").unwrap();
-        let mut exec = Execution::start(story, "implement");
+        let change_request = ChangeRequest::from_text("As a user...").unwrap();
+        let mut exec = Execution::start(change_request, "implement");
         let q = exec.ask(
             "OAuth2 or JWT?".into(),
             vec![
@@ -426,8 +426,8 @@ mod tests {
 
     #[test]
     fn multiple_sequential_gates_are_kept_in_history() {
-        let story = UserStory::from_text("As a user...").unwrap();
-        let mut exec = Execution::start(story, "implement");
+        let change_request = ChangeRequest::from_text("As a user...").unwrap();
+        let mut exec = Execution::start(change_request, "implement");
 
         exec.ask(
             "OAuth2 or JWT?".into(),
@@ -461,8 +461,8 @@ mod tests {
 
     #[test]
     fn cancel_stops_a_waiting_execution() {
-        let story = UserStory::from_text("As a user...").unwrap();
-        let mut exec = Execution::start(story, "implement");
+        let change_request = ChangeRequest::from_text("As a user...").unwrap();
+        let mut exec = Execution::start(change_request, "implement");
         exec.ask(
             "OAuth2 or JWT?".into(),
             vec![DecisionOption {
@@ -482,8 +482,8 @@ mod tests {
 
     #[test]
     fn json_round_trip() {
-        let story = UserStory::from_text("As a user...").unwrap();
-        let exec = Execution::start(story, "implement");
+        let change_request = ChangeRequest::from_text("As a user...").unwrap();
+        let exec = Execution::start(change_request, "implement");
         let json = serde_json::to_string(&exec).unwrap();
         let back: Execution = serde_json::from_str(&json).unwrap();
         assert_eq!(back.id, exec.id);

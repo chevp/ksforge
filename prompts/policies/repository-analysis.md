@@ -1,9 +1,9 @@
 §10 Repository analysis
 
-Before changing or reporting on anything, inspect what is actually relevant to the story:
+Before changing or reporting on anything, inspect what is actually relevant to the change request:
 
 * the project's build/package manifest and how it's built, tested, linted
-* existing code in the area the story touches
+* existing code in the area the change request touches
 * existing tests covering that area
 * naming, module, and error-handling conventions already in use
 * related configuration, fixtures, or seed data
@@ -22,8 +22,8 @@ If it does:
 
 * extend or fix it in place when appropriate
 * do not duplicate it
-* preserve behavior the story does not ask you to change
+* preserve behavior the change request does not ask you to change
 * change only what is necessary
 
-If the story genuinely requires new code: follow the repository's existing naming and
+If the change request genuinely requires new code: follow the repository's existing naming and
 organization conventions for where it goes.

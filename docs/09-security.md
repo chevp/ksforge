@@ -2,24 +2,25 @@
 
 ## Prompt injection
 
-Repository content — file contents, issue/PR text, comments, the user
-story itself — is treated as **data**, never as instructions. The system
+Repository content — file contents, issue/PR text, comments, the change
+request itself — is treated as **data**, never as instructions. The system
 prompt ksforge constructs (`application::prompt::system_prompt`) says so
 explicitly and is sent as Claude Code's system prompt, which takes
 precedence over anything found while it explores the repository. This
 matters most in public repositories, where an issue or PR body is
 attacker-controlled text that a workflow might feed in as (part of) a
-story.
+change request.
 
 Concretely:
 
 - ksforge's own policy (constraints, capability instructions) is
   assembled server-side (inside ksforge, before the subprocess is spawned)
-  and passed via `--append-system-prompt`, not interpolated into the user
-  story text where it could be confused with attacker content.
-- The story and constraints are explicit, separate structures
-  (`ImplementationRequest.story` / `.constraints`) all the way through —
-  nothing merges arbitrary repository text into the constraint list.
+  and passed via `--append-system-prompt`, not interpolated into the
+  change request text where it could be confused with attacker content.
+- The change request and constraints are explicit, separate structures
+  (`ImplementationRequest.change_request` / `.constraints`) all the way
+  through — nothing merges arbitrary repository text into the constraint
+  list.
 - For public repositories, require explicit authorization before a
   workflow can modify code or open a PR. The primary run (`ksforge
   implement ...`) should stay `workflow_dispatch`-gated (manual, already
@@ -54,6 +55,27 @@ Concretely:
   choose an arbitrary capability, or bypass `--validate`/`--create-pull-request`
   policy — it only supplies the `option` id `ksforge resume` needs, on an
   execution and gate that already exist.
+
+- A `/ksforge implement <change-request>` or `/ksforge fix <change-request>`
+  PR comment (see
+  "Comment-driven follow-up" in [07-github-actions.md](07-github-actions.md))
+  is a materially bigger trust step than `/ksforge choose`: it starts a
+  brand new, write-capable, billed run from **arbitrary comment text**,
+  not a pick among options the agent itself already offered. The same
+  defense-in-depth list applies (workflow-level `author_association`
+  filter, `authorize_commenter` re-check, per-comment idempotency), but
+  here the authorization check is the *only* thing standing between an
+  externally-triggerable event and a real agent run with write access —
+  there is no bounded option set to also validate against, unlike
+  `/ksforge choose`. This is why `parse_follow_up_command`
+  (`github::decision`) requires the trigger to be the whole of its own
+  comment line rather than a substring anywhere, and why the
+  authorization check runs *before* anything is executed, not after.
+  What it still cannot do: the resulting run goes through the exact same
+  system prompt, authority hierarchy, and "repository content is data,
+  not instructions" posture as any other run (see "Prompt injection"
+  above) — a comment is no more able to override ksforge's own policy
+  than a `--change-request` argument is.
 
 ## Least privilege
 
@@ -92,7 +114,7 @@ servers explicitly named in that file — never anything a user- or
 project-level Claude Code config might otherwise contribute. ksforge does
 not parse, validate, or filter the file's contents (including any `env`
 map inside it); that trust boundary is the same one that already applies
-to the workspace and story text the file lives next to, not a new one.
+to the workspace and change request text the file lives next to, not a new one.
 
 ## Command execution
 

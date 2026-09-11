@@ -2,13 +2,14 @@
 //! Code's process interface and of Git/GitHub. See docs/03-architecture.md.
 
 pub mod capability;
+pub mod change_request;
 pub mod constraint;
 pub mod error;
 pub mod execution;
 pub mod request;
-pub mod story;
 
 pub use capability::{Capability, CapabilityRegistry, ExecutionContext, ToolPolicy};
+pub use change_request::ChangeRequest;
 pub use constraint::Constraint;
 pub use error::{KsforgeError, Result};
 pub use execution::{
@@ -16,4 +17,3 @@ pub use execution::{
     GateId, HumanDecision, HumanDecisionRequest, ValidationCommandOutcome, ValidationOutcome,
 };
 pub use request::{ImplementationRequest, ValidationPolicy};
-pub use story::UserStory;

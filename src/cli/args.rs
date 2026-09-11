@@ -6,7 +6,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 #[command(
     name = "ksforge",
     version,
-    about = "Turns user stories into controlled, resumable Claude Code workflows."
+    about = "Turns change requests into controlled, resumable Claude Code workflows."
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -15,14 +15,14 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Implement a user story end to end.
-    Implement(StoryArgs),
+    /// Implement a change request end to end.
+    Implement(ChangeRequestArgs),
     /// Review the workspace and report findings; never modifies files.
-    Review(StoryArgs),
+    Review(ChangeRequestArgs),
     /// Diagnose and fix a described problem.
-    Fix(StoryArgs),
+    Fix(ChangeRequestArgs),
     /// Explain part of the workspace; never modifies files.
-    Explain(StoryArgs),
+    Explain(ChangeRequestArgs),
     /// Continue a paused execution with a human decision.
     Resume(ResumeArgs),
     /// Show an execution's state, including any pending question.
@@ -32,10 +32,17 @@ pub enum Command {
     /// Render an execution's progress report and post/update it as a PR
     /// comment via `gh` (section 13-15).
     PostReport(PostReportArgs),
-    /// Validate a `/ksforge choose <option>` PR/issue comment against a
-    /// paused execution's open gate and print the option id to act on —
-    /// does not itself resume (section 16-17). Chain with `ksforge resume`.
+    /// Classify a PR/issue comment: `/ksforge choose <option>` against a
+    /// paused execution's open gate (prints the option id — chain with
+    /// `ksforge resume`), or `/ksforge implement|fix <change-request>` as a new
+    /// follow-up run (prints the capability and change request — chain with
+    /// `ksforge implement`/`ksforge fix --push-to-branch`). Never itself
+    /// starts or resumes anything (section 16-17).
     HandleComment(HandleCommentArgs),
+    /// Analyze a new change request against the workspace's other active
+    /// executions and report overlap/conflict risk — never implements
+    /// anything itself (see prompts/coordinator/system-prompt.md).
+    Coordinate(CoordinateArgs),
     /// List available capabilities.
     Capabilities,
 }
@@ -56,17 +63,57 @@ pub enum Engine {
 }
 
 #[derive(Args)]
-pub struct StoryArgs {
-    /// The user story text.
-    #[arg(long, conflicts_with = "story_file")]
-    pub story: Option<String>,
+pub struct ChangeRequestArgs {
+    /// The change request text.
+    #[arg(long, conflicts_with = "change_request_file")]
+    pub change_request: Option<String>,
 
-    /// Read the user story from a file instead of `--story`.
-    #[arg(long, value_name = "PATH", conflicts_with = "story")]
-    pub story_file: Option<PathBuf>,
+    /// Read the change request from a file instead of `--change-request`.
+    #[arg(long, value_name = "PATH", conflicts_with = "change_request")]
+    pub change_request_file: Option<PathBuf>,
 
     #[command(flatten)]
     pub common: CommonArgs,
+}
+
+/// Deliberately narrower than `ChangeRequestArgs` — `coordinate` never
+/// writes, so it has no `--dry-run`/`--validate`/`--create-pull-request`/
+/// `--push-to-branch`/`--mcp-config` to expose.
+#[derive(Args)]
+pub struct CoordinateArgs {
+    /// The change request text.
+    #[arg(long, conflicts_with = "change_request_file")]
+    pub change_request: Option<String>,
+
+    /// Read the change request from a file instead of `--change-request`.
+    #[arg(long, value_name = "PATH", conflicts_with = "change_request")]
+    pub change_request_file: Option<PathBuf>,
+
+    /// Workspace whose active executions to analyze against.
+    #[arg(long, default_value = ".")]
+    pub workspace: PathBuf,
+
+    /// Which coding agent CLI to spawn.
+    #[arg(long, value_enum, default_value_t = Engine::Claude)]
+    pub engine: Engine,
+
+    /// Model alias or full name — see `CommonArgs::model`'s doc comment
+    /// for the same `--engine`-dependent default behavior.
+    #[arg(long)]
+    pub model: Option<String>,
+
+    /// Maximum dollar amount the agent may spend on this analysis.
+    #[arg(long)]
+    pub max_budget_usd: Option<f64>,
+
+    #[arg(long, env = "KSFORGE_CLAUDE_PATH", value_name = "PATH")]
+    pub claude_path: Option<PathBuf>,
+
+    #[arg(long, env = "KSFORGE_CODEX_PATH", value_name = "PATH")]
+    pub codex_path: Option<PathBuf>,
+
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
 }
 
 #[derive(Args)]
@@ -131,9 +178,14 @@ pub struct PostReportArgs {
 
 #[derive(Args)]
 pub struct HandleCommentArgs {
-    /// The execution the comment is replying to.
+    /// The execution the comment is replying to. Required for a
+    /// `/ksforge choose <option>` reply to a pending decision; omit for a
+    /// `/ksforge implement|fix <change-request>` follow-up, which has no execution
+    /// yet — start one with a normal `ksforge implement`/`ksforge fix`
+    /// call using this command's output (section: does not itself act,
+    /// same as the choose-flow — chain the two).
     #[arg(long)]
-    pub execution_id: String,
+    pub execution_id: Option<String>,
 
     /// The GitHub comment's own numeric id — the idempotency key (section
     /// 17): the same comment delivered twice must not be acted on twice.
@@ -210,12 +262,22 @@ pub struct CommonArgs {
     pub format: OutputFormat,
 
     /// Open a pull request via `gh` if the run completes with changes.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "push_to_branch")]
     pub create_pull_request: bool,
 
     /// Base branch for `--create-pull-request` (section 19).
     #[arg(long, default_value = "main")]
     pub base_branch: String,
+
+    /// Commit and push changes directly to the already-checked-out branch
+    /// instead of opening a new PR — for a PR follow-up run (`ksforge
+    /// handle-comment` classified a `/ksforge implement|fix <change-request>`
+    /// comment): the workspace is already a checkout of that PR's own
+    /// head branch, so this updates the existing PR rather than opening
+    /// a new one the way `--create-pull-request` would. See
+    /// docs/07-github-actions.md.
+    #[arg(long, conflicts_with = "create_pull_request")]
+    pub push_to_branch: bool,
 
     /// Path to a Claude Code `--mcp-config` file, giving the agent access
     /// to additional MCP servers (e.g. read-only access to an external

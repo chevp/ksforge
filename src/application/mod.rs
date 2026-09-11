@@ -3,6 +3,7 @@
 //! `execute`/`resume`; policy (prompts, tool scope, constraints) lives in
 //! `implement`/`review`/`fix`/`explain`.
 
+pub mod coordinate;
 pub mod execute;
 pub mod explain;
 pub mod fix;

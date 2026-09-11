@@ -1,13 +1,13 @@
 name: "ksforge"
-description: "Turns a user story into a controlled Claude Code workflow"
+description: "Turns a change request into a controlled Claude Code workflow"
 author: "chevp"
 branding:
   icon: "cpu"
   color: "purple"
 
 inputs:
-  story:
-    description: "The user story to act on. Required unless resuming."
+  change-request:
+    description: "The change request to act on. Required unless resuming."
     required: false
   execution-id:
     description: "Resume this paused execution instead of starting a new one. Requires `decision`."
@@ -130,7 +130,7 @@ runs:
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
-        KSFORGE_STORY: ${{ inputs.story }}
+        KSFORGE_CHANGE_REQUEST: ${{ inputs.change-request }}
         KSFORGE_EXECUTION_ID: ${{ inputs.execution-id }}
         KSFORGE_DECISION: ${{ inputs.decision }}
         KSFORGE_CAPABILITY: ${{ inputs.capability }}
@@ -143,7 +143,7 @@ runs:
         KSFORGE_BASE_BRANCH: ${{ inputs.base-branch }}
         KSFORGE_FORMAT: ${{ inputs.format }}
         KSFORGE_MCP_CONFIG: ${{ inputs.mcp-config }}
-      # All free-form inputs (story, in particular) are read from env vars
+      # All free-form inputs (change-request, in particular) are read from env vars
       # here rather than interpolated as `${{ inputs.x }}` directly into
       # this script — GitHub Actions expands `${{ }}` as raw text
       # substitution before bash parses the line, so inlining untrusted
@@ -166,7 +166,7 @@ runs:
         if [ -n "$KSFORGE_EXECUTION_ID" ]; then
           out=$(ksforge resume "$KSFORGE_EXECUTION_ID" --decision "$KSFORGE_DECISION" "${args[@]}")
         else
-          out=$(ksforge "$KSFORGE_CAPABILITY" --story "$KSFORGE_STORY" "${args[@]}")
+          out=$(ksforge "$KSFORGE_CAPABILITY" --change-request "$KSFORGE_CHANGE_REQUEST" "${args[@]}")
         fi
         code=$?
         set -e
