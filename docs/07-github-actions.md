@@ -63,29 +63,26 @@ Access Token** (or a GitHub App installation with that permission) —
 never on the auto-generated `GITHUB_TOKEN`, regardless of what the
 workflow's own `permissions:` block grants it.
 
-To let a change request actually push a workflow-file change, override
-`actions/checkout`'s `token:` input with such a PAT (checkout persists it
-as the job's git credential, so ksforge's own `git push` picks it up too —
-`gh pr create` itself needs no extra scope, only the push of a commit that
-touches `.github/workflows/*` does). Fall back to the default token with
-`||` so this is a no-op until you actually add the secret — safe to leave
-in a template that most consumers will never opt into:
+To let a change request actually push a workflow-file change, `git`
+inside the job needs to authenticate as something holding that scope
+instead of the default `GITHUB_TOKEN` — in practice, a classic Personal
+Access Token (scopes `workflow` + `repo`) supplied to `actions/checkout`'s
+`token:` input, since checkout persists whatever token it's given as the
+job's own git credential (so ksforge's own later `git push` picks it up
+too; `gh pr create` itself needs no extra scope, only the push of a commit
+that touches `.github/workflows/*` does).
 
-```yaml
-- uses: actions/checkout@v7
-  with:
-    token: ${{ secrets.WORKFLOW_SCOPED_PAT || secrets.GITHUB_TOKEN }}
-```
-
-Generate the PAT at <https://github.com/settings/tokens> (classic, scopes
-`workflow` + `repo`), add it as a repository secret named
-`WORKFLOW_SCOPED_PAT`. Not set by default in the templates here — even
-with the `||` fallback, actually *creating* the PAT and adding it as a
-secret is a meaningfully bigger, real grant (a token that can edit
-workflow files can, in principle, edit its own future permissions) that
-should be a deliberate opt-in per repository. Without it, a change request
-that touches workflow files still gets implemented and diffed — only the
-push (and therefore any PR) fails.
+**Not yet a verified snippet to copy.** A `token: ${{
+secrets.WORKFLOW_SCOPED_PAT || secrets.GITHUB_TOKEN }}` fallback (meant to
+be a no-op until the secret is actually set) was tried in a real
+`ksforge-playground` workflow and instead broke that checkout outright —
+`fatal: could not read Username for 'https://github.com': terminal
+prompts disabled` — even though no `WORKFLOW_SCOPED_PAT` secret existed
+yet, i.e. even the fallback arm regressed the previously-working plain
+default. Reverted there rather than left in place unverified. If you set
+this up, test the exact `token:` expression you use against a run that
+does *not* touch `.github/workflows/*` first, to confirm it doesn't
+regress the common case, before relying on it for one that does.
 
 ## Primary example: `workflow_dispatch`
 
