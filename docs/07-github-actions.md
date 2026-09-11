@@ -44,6 +44,24 @@ gh api -X PUT repos/<owner>/<repo>/actions/permissions/workflow \
 Not needed for `review`/`explain` or any run with `create-pull-request:
 "false"`.
 
+## If the change might touch `.github/workflows/*`
+
+`permissions: contents: write` is not enough to push a commit that adds or
+modifies a workflow file — GitHub gates that separately. Confirmed against
+a real failure (a change request asking for a new deploy workflow):
+
+```text
+! [remote rejected] ksforge/<id> -> ksforge/<id> (refusing to allow a GitHub App
+to create or update workflow `.github/workflows/<name>.yml` without `workflows` permission)
+```
+
+Add `workflows: write` to the workflow's own `permissions:` block if the
+change requests you expect might ever touch `.github/workflows/*` —
+deliberately not in the default templates here, since it's a meaningfully
+bigger grant (an agent that can edit workflow files can, in principle,
+edit its own future permissions) that should be an opt-in per repository,
+not a default every consumer inherits unasked.
+
 ## Primary example: `workflow_dispatch`
 
 ```yaml
