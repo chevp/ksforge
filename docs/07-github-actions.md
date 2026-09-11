@@ -67,21 +67,25 @@ To let a change request actually push a workflow-file change, override
 `actions/checkout`'s `token:` input with such a PAT (checkout persists it
 as the job's git credential, so ksforge's own `git push` picks it up too —
 `gh pr create` itself needs no extra scope, only the push of a commit that
-touches `.github/workflows/*` does):
+touches `.github/workflows/*` does). Fall back to the default token with
+`||` so this is a no-op until you actually add the secret — safe to leave
+in a template that most consumers will never opt into:
 
 ```yaml
 - uses: actions/checkout@v7
   with:
-    token: ${{ secrets.WORKFLOW_SCOPED_PAT }}
+    token: ${{ secrets.WORKFLOW_SCOPED_PAT || secrets.GITHUB_TOKEN }}
 ```
 
-Deliberately not wired into the default templates here — supplying a PAT
-with this scope is a meaningfully bigger, real grant (a token that can
-edit workflow files can, in principle, edit its own future permissions)
-that should be an opt-in per repository, not a default every consumer
-inherits unasked. Without it, a change request that touches workflow
-files still gets implemented and diffed — only the push (and therefore any
-PR) fails.
+Generate the PAT at <https://github.com/settings/tokens> (classic, scopes
+`workflow` + `repo`), add it as a repository secret named
+`WORKFLOW_SCOPED_PAT`. Not set by default in the templates here — even
+with the `||` fallback, actually *creating* the PAT and adding it as a
+secret is a meaningfully bigger, real grant (a token that can edit
+workflow files can, in principle, edit its own future permissions) that
+should be a deliberate opt-in per repository. Without it, a change request
+that touches workflow files still gets implemented and diffed — only the
+push (and therefore any PR) fails.
 
 ## Primary example: `workflow_dispatch`
 
