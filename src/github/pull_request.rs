@@ -32,6 +32,8 @@ pub async fn create_from_execution(
         return Ok(None);
     }
 
+    ensure_git_identity(workspace_root).await?;
+
     let branch = format!("ksforge/{}", short_id(&execution.id.0));
     run_git(workspace_root, &["checkout", "-b", &branch]).await?;
 
@@ -95,6 +97,8 @@ pub async fn push_follow_up(
         return Ok(None);
     }
 
+    ensure_git_identity(workspace_root).await?;
+
     let mut add_args: Vec<String> = vec!["add".into(), "--".into()];
     add_args.extend(result.changed_files.iter().map(|p| p.display().to_string()));
     run_git(
@@ -108,6 +112,44 @@ pub async fn push_follow_up(
     run_git(workspace_root, &["push"]).await?;
 
     Ok(Some(title))
+}
+
+/// `git commit` needs an identity to attribute the commit to, and a fresh
+/// CI runner has none configured at any level (local/global/system) by
+/// default — confirmed against a real run: "Author identity unknown ...
+/// fatal: empty ident name". Every consumer workflow remembering its own
+/// "Configure git identity" step is exactly the kind of boilerplate
+/// ksforge should own once here instead. Never overwrites an identity
+/// that's already configured (checked, not just set unconditionally) —
+/// scoped `--local` so the fallback never leaks into the user's own global
+/// git config.
+async fn ensure_git_identity(workspace_root: &Path) -> Result<()> {
+    if run_git(workspace_root, &["config", "user.email"])
+        .await
+        .is_err()
+    {
+        run_git(
+            workspace_root,
+            &[
+                "config",
+                "--local",
+                "user.email",
+                "41898282+github-actions[bot]@users.noreply.github.com",
+            ],
+        )
+        .await?;
+    }
+    if run_git(workspace_root, &["config", "user.name"])
+        .await
+        .is_err()
+    {
+        run_git(
+            workspace_root,
+            &["config", "--local", "user.name", "github-actions[bot]"],
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 /// Prefers the agent's own headline (`AgentOutcome::title`) — a clean,
@@ -164,6 +206,33 @@ fn truncate(s: &str, max: usize) -> String {
         s.to_string()
     } else {
         format!("{}...", s.chars().take(max).collect::<String>())
+    }
+}
+
+#[cfg(test)]
+mod ensure_git_identity_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn leaves_the_repo_with_a_usable_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        run_git(dir.path(), &["init", "-q"]).await.unwrap();
+
+        ensure_git_identity(dir.path()).await.unwrap();
+
+        assert!(run_git(dir.path(), &["config", "user.email"]).await.is_ok());
+        assert!(run_git(dir.path(), &["config", "user.name"]).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn is_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        run_git(dir.path(), &["init", "-q"]).await.unwrap();
+
+        ensure_git_identity(dir.path()).await.unwrap();
+        ensure_git_identity(dir.path()).await.unwrap();
+
+        assert!(run_git(dir.path(), &["config", "user.email"]).await.is_ok());
     }
 }
 

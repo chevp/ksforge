@@ -6,6 +6,10 @@ name: Change Request to ksforge
 # against ksforge's own current action.yml/CLI, not a stale released
 # version — the opened PR still goes through ci.yml (pull_request trigger)
 # before anyone merges it.
+#
+# Always implement: a "change request" is a request to change something,
+# not to review or explain it — those are different capabilities with
+# different (read-only) semantics, not a choice that belongs on this input.
 
 on:
   workflow_dispatch:
@@ -14,16 +18,6 @@ on:
         description: 'Change Request als Markdown/Text'
         required: true
         type: string
-      capability:
-        description: 'Was ksforge tun soll'
-        required: false
-        type: choice
-        default: implement
-        options:
-          - implement
-          - review
-          - fix
-          - explain
 
 permissions:
   contents: write
@@ -42,16 +36,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Configure git identity
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
       - name: Process change request with ksforge
         uses: chevp/ksforge@main
         with:
           change-request: ${{ inputs.change_request }}
-          capability: ${{ inputs.capability }}
+          capability: implement
           format: json
           create-pull-request: "true"
           base-branch: main

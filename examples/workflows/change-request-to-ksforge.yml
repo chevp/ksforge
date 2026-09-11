@@ -6,6 +6,12 @@ name: Change Request to ksforge
 # see docs/07-github-actions.md in the ksforge repo for both. Pin
 # chevp/ksforge@<tag> to a real release (see GitHub Releases) rather than
 # leaving it at a placeholder version.
+#
+# Always implement: a "change request" is a request to change something,
+# not to review or explain it — those are different capabilities with
+# different (read-only) semantics, not a choice that belongs on this input.
+# Use `ksforge review`/`ksforge explain` directly (see docs/04-cli-reference.md)
+# if you want a workflow for those instead.
 
 on:
   workflow_dispatch:
@@ -14,16 +20,6 @@ on:
         description: 'Change Request als Markdown/Text'
         required: true
         type: string
-      capability:
-        description: 'Was ksforge tun soll'
-        required: false
-        type: choice
-        default: implement
-        options:
-          - implement
-          - review
-          - fix
-          - explain
 
 permissions:
   contents: write
@@ -42,16 +38,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Configure git identity
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
       - name: Process change request with ksforge
         uses: chevp/ksforge@v1
         with:
           change-request: ${{ inputs.change_request }}
-          capability: ${{ inputs.capability }}
+          capability: implement
           format: json
           create-pull-request: "true"
           base-branch: main

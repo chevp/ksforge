@@ -3,6 +3,15 @@
 Ready-to-copy template for the primary flow below:
 [examples/workflows/change-request-to-ksforge.yml](../examples/workflows/change-request-to-ksforge.yml).
 
+You do **not** need your own "configure git identity" step for
+`--create-pull-request`/`--push-to-branch` to work — `git commit` needs
+one, a fresh runner has none by default, and ksforge sets a local fallback
+(`github-actions[bot]`) itself if nothing is already configured at any
+level (`github::pull_request::ensure_git_identity`), rather than every
+consumer workflow needing to remember this. A step that already sets one
+(as some example workflows below still show, from before this existed)
+is harmless — ksforge's fallback only applies when none exists yet.
+
 ## Prerequisite: let Actions open pull requests
 
 `create-pull-request: "true"` needs more than `permissions:
