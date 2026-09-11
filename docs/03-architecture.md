@@ -118,9 +118,10 @@ actually matters here.
 
 Every agent turn: `claude -p --output-format json --json-schema <schema>
 --tools <policy> --permission-mode <mode> --permission-prompts none
---model <name> [--append-system-prompt] [--max-budget-usd] [--resume
-<session-id>] [--mcp-config <path> --strict-mcp-config] "<prompt>"`, with
-the workspace (or its isolated dry-run copy) as the working directory.
+[--allowedTools Bash] --model <name> [--append-system-prompt]
+[--max-budget-usd] [--resume <session-id>] [--mcp-config <path>
+--strict-mcp-config] "<prompt>"`, with the workspace (or its isolated
+dry-run copy) as the working directory.
 
 - **`--tools`**: `review`/`explain` get `Read,Grep,Glob` only; `implement`/
   `fix` get the default set (no `--tools` flag passed).
@@ -133,6 +134,21 @@ the workspace (or its isolated dry-run copy) as the working directory.
   `acceptEdits` for write-capable capabilities, `plan` for read-only ones,
   and any prompt that would still require a human is auto-denied rather
   than hanging the process.
+- **`--allowedTools Bash`**: added only alongside `acceptEdits`.
+  `acceptEdits` pre-approves Edit/Write-family tools but *not* Bash —
+  confirmed against a real run where an `implement` turn needing `cargo
+  build`/`cargo test` for §21's mandatory validation step had that Bash
+  call auto-denied (nobody to answer the prompt), and the agent correctly
+  refused to claim `completed` without a validation run it couldn't
+  execute, rather than fabricating one. This pre-approves Bash
+  specifically without going as far as `--permission-mode
+  bypassPermissions` (Claude Code's own docs: "recommended only for
+  sandboxes with no internet access" — too broad for ksforge's typical CI
+  runner, which does have internet access). The Codex CLI has no
+  equivalent gap: its `workspace-write` sandbox already covers Bash
+  execution the same way it covers file edits (see
+  `agent::codex::CodexExecutor`'s own doc comment), so nothing analogous
+  is needed there.
 - **`--json-schema`**: constrains Claude Code's final turn to a flat
   `{status, title?, summary, changed_files?, question?, options?,
   failure_reason?}` shape (`status` one of `completed` /

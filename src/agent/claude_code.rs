@@ -59,6 +59,22 @@ impl ClaudeCodeExecutor {
             // instead of hanging the process (section 15 of the base spec).
             .arg("--permission-prompts")
             .arg("none");
+
+        if request.permission_mode == PermissionMode::AcceptEdits {
+            // `acceptEdits` only pre-approves Edit/Write-family tools, not
+            // Bash — confirmed against a real run: an `implement` turn
+            // that needed `cargo build`/`cargo test` for §21's mandatory
+            // validation step had that Bash call auto-denied (no prompt
+            // answerable, see above), and the agent correctly refused to
+            // claim `completed` without a validation run it couldn't
+            // actually execute. `--allowedTools Bash` pre-approves Bash
+            // specifically, without going as far as `--permission-mode
+            // bypassPermissions` (Claude Code's own docs: "recommended
+            // only for sandboxes with no internet access" — too broad for
+            // ksforge's typical CI runner, which does have internet
+            // access).
+            cmd.arg("--allowedTools").arg("Bash");
+        }
     }
 }
 
@@ -221,6 +237,60 @@ fn resolve_windows_shim(path: PathBuf) -> PathBuf {
 #[cfg(not(windows))]
 fn resolve_windows_shim(path: PathBuf) -> PathBuf {
     path
+}
+
+#[cfg(test)]
+mod permission_args_tests {
+    use super::*;
+
+    fn request(permission_mode: PermissionMode) -> AgentRequest {
+        AgentRequest {
+            prompt: String::new(),
+            system_prompt: None,
+            working_directory: PathBuf::from("."),
+            tools: Vec::new(),
+            model: None,
+            permission_mode,
+            json_schema: None,
+            max_budget_usd: None,
+            resume_session_id: None,
+            mcp_config: None,
+        }
+    }
+
+    fn args_for(permission_mode: PermissionMode) -> Vec<String> {
+        let mut cmd = Command::new("true");
+        ClaudeCodeExecutor::permission_args(&request(permission_mode), &mut cmd);
+        cmd.as_std()
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn accept_edits_also_pre_approves_bash() {
+        let args = args_for(PermissionMode::AcceptEdits);
+        assert_eq!(
+            args,
+            vec![
+                "--permission-mode",
+                "acceptEdits",
+                "--permission-prompts",
+                "none",
+                "--allowedTools",
+                "Bash",
+            ]
+        );
+    }
+
+    #[test]
+    fn read_only_does_not_get_bash_pre_approved() {
+        let args = args_for(PermissionMode::ReadOnly);
+        assert_eq!(
+            args,
+            vec!["--permission-mode", "plan", "--permission-prompts", "none"]
+        );
+    }
 }
 
 #[cfg(test)]
