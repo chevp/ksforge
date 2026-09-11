@@ -1,6 +1,7 @@
 use std::path::Path;
+use std::time::Duration;
 
-use crate::agent::{AgentOutcome, AgentRequest, OutcomeStatus, PermissionMode};
+use crate::agent::{AgentOutcome, AgentRequest, AgentResult, OutcomeStatus, PermissionMode};
 use crate::color::{self, Color};
 use crate::domain::{
     ActionKind, ActionResult, AgentValidationReport, Capability, ChangeScope, DecisionOption,
@@ -127,6 +128,54 @@ enum PhaseTurn {
     Stopped,
 }
 
+/// Retries a transient executor failure (network blip, provider rate
+/// limit/overload — see `AgentError::is_transient`) with exponential
+/// backoff, up to `MAX_ATTEMPTS` total tries, before giving up. A phase
+/// turn only runs after UNDERSTAND/LOCATE (and their already-spent cost)
+/// have completed, so one flaky call should not throw the whole execution
+/// away. Anything not classified as transient (a bad request, a missing
+/// engine, the model's own malformed output) fails on the first attempt,
+/// same as before this existed.
+const MAX_ATTEMPTS: u32 = 3;
+const RETRY_BASE_DELAY: Duration = Duration::from_secs(2);
+
+async fn execute_with_retry(
+    context: &ExecutionContext,
+    request: &AgentRequest,
+    capability: &dyn Capability,
+) -> Result<AgentResult> {
+    let mut attempt = 1;
+    loop {
+        match context.executor.execute(request.clone()).await {
+            Ok(result) => return Ok(result),
+            Err(e) if attempt < MAX_ATTEMPTS && e.is_transient() => {
+                let delay = RETRY_BASE_DELAY * 2u32.pow(attempt - 1);
+                eprintln!(
+                    "  {}",
+                    color::paint(
+                        &format!(
+                            "[ksforge] transient executor error, retrying in {}s (attempt {} of {MAX_ATTEMPTS}): {e}",
+                            delay.as_secs(),
+                            attempt + 1,
+                        ),
+                        Color::Yellow,
+                        false,
+                    )
+                );
+                tokio::time::sleep(delay).await;
+                attempt += 1;
+            }
+            Err(e) => {
+                return Err(KsforgeError::ExecutorFailed(format!(
+                    "{} ({} capability): {e}",
+                    e,
+                    capability.id()
+                )));
+            }
+        }
+    }
+}
+
 /// Runs one LLM phase turn: builds the `AgentRequest` for `tool_policy`,
 /// invokes the executor, and interprets the resulting `AgentOutcome` — the
 /// same three-way status handling every phase needs (human gate / failure /
@@ -161,9 +210,7 @@ async fn run_llm_phase(
         mcp_config: context.mcp_config.clone(),
     };
 
-    let agent_result = context.executor.execute(agent_request).await.map_err(|e| {
-        KsforgeError::ExecutorFailed(format!("{} ({} capability): {e}", e, capability.id()))
-    })?;
+    let agent_result = execute_with_retry(context, &agent_request, capability).await?;
     if let Some(sid) = &agent_result.session_id {
         *session_id = Some(sid.clone());
     }
@@ -482,8 +529,13 @@ pub(crate) async fn run_phase_loop(
                 let agent_review = if request.validation.agent_review {
                     phase_start("== Validate: agent reviewing the change ==");
                     let before = workspace::snapshot::hash_tree(working_dir)?;
-                    let (system_prompt, user_prompt) =
-                        prompt::for_validate(capability, request, working_dir, &understanding, &action);
+                    let (system_prompt, user_prompt) = prompt::for_validate(
+                        capability,
+                        request,
+                        working_dir,
+                        &understanding,
+                        &action,
+                    );
                     let (tools, permission_mode) = validate_tools_and_permission();
                     let turn = run_llm_phase(
                         execution,

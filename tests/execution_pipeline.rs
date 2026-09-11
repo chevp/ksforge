@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ksforge::agent::MockAgentExecutor;
+use ksforge::agent::{AgentError, MockAgentExecutor};
 use ksforge::application::implement::Implement;
 use ksforge::domain::{
     Capability, CapabilityRegistry, ChangeRequest, ExecutionContext, ExecutionStatus,
@@ -313,6 +313,68 @@ async fn a_malformed_phase_response_fails_the_execution_without_retrying() {
         1,
         "no retry after a malformed response"
     );
+}
+
+/// A transient executor failure (e.g. a network blip or a rate limit,
+/// keyword-sniffed by `AgentError::is_transient`) is retried within the
+/// same phase turn instead of failing the execution outright.
+#[tokio::test(start_paused = true)]
+async fn a_transient_executor_error_is_retried_within_the_same_phase() {
+    let dir = tempfile::tempdir().unwrap();
+    let executor = Arc::new(MockAgentExecutor::with_results(vec![
+        Err(AgentError::NonZeroExit(
+            "529 Overloaded: please retry".into(),
+        )),
+        Ok(understand_ok()),
+        Ok(locate_ok()),
+        Ok(json!({ "status": "completed", "summary": "Added login.", "changed_files": [] })),
+    ]));
+    let captured = executor.requests();
+    let context = ExecutionContext {
+        executor,
+        workspace_root: dir.path().to_path_buf(),
+        model: None,
+        max_budget_usd: None,
+        dry_run: false,
+        mcp_config: None,
+    };
+
+    let execution = Implement
+        .execute(request(dir.path()), context)
+        .await
+        .unwrap();
+
+    assert_eq!(execution.status, ExecutionStatus::Completed);
+    assert_eq!(
+        captured.lock().unwrap().len(),
+        4,
+        "one retried attempt for UNDERSTAND, plus one call each for LOCATE and ACT"
+    );
+}
+
+/// A non-transient executor error (e.g. the CLI not being installed at
+/// all) fails the execution after exactly one attempt — retrying an
+/// unrecoverable, static failure would only waste time and (for a paid
+/// engine) money.
+#[tokio::test]
+async fn a_non_transient_executor_error_fails_without_retrying() {
+    let dir = tempfile::tempdir().unwrap();
+    let executor = Arc::new(MockAgentExecutor::with_results(vec![Err(
+        AgentError::NotFound("claude (not on PATH)".into()),
+    )]));
+    let captured = executor.requests();
+    let context = ExecutionContext {
+        executor,
+        workspace_root: dir.path().to_path_buf(),
+        model: None,
+        max_budget_usd: None,
+        dry_run: false,
+        mcp_config: None,
+    };
+
+    let err = Implement.execute(request(dir.path()), context).await;
+    assert!(err.is_err());
+    assert_eq!(captured.lock().unwrap().len(), 1, "no retry attempt");
 }
 
 /// A failing `--validate` command fails the execution — VALIDATE runs

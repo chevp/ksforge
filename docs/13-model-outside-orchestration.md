@@ -40,9 +40,9 @@ UNDERSTAND       LOCATE          ACT              VALIDATE           REPORT
                                                                     prior phases
 ```
 
-Each phase is its own subprocess invocation of `claude` (or `codex` with
-`--engine codex`) — the model never sees "here is your full plan, run it end
-to end." It sees one phase's prompt, answers it, and the process exits.
+Each phase is its own subprocess invocation of `claude` — the model never
+sees "here is your full plan, run it end to end." It sees one phase's
+prompt, answers it, and the process exits.
 `ksforge` decides what happens next.
 
 The sequence is enforced by the type system, not by convention:

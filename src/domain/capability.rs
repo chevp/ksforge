@@ -102,7 +102,6 @@ impl CapabilityRegistry {
             Arc::new(crate::application::fix::Fix),
             Arc::new(crate::application::explain::Explain),
             Arc::new(crate::application::txt2img::Txt2Img),
-            Arc::new(crate::application::img2img::Img2Img),
             Arc::new(crate::application::test::Test),
         ];
         Self { capabilities }

@@ -63,9 +63,7 @@ pub struct AgentResult {
 #[derive(Debug, Error)]
 pub enum AgentError {
     /// The executor's payload is the whole message, including any
-    /// install/`--*-path` hint — this variant is shared across executors
-    /// (`ClaudeCodeExecutor`, `CodexExecutor`), so it carries no
-    /// CLI-specific wording of its own.
+    /// install/`--*-path` hint.
     #[error("agent executable not found: {0}")]
     NotFound(String),
 
@@ -75,12 +73,10 @@ pub enum AgentError {
     #[error("agent produced output that could not be parsed: {0}")]
     MalformedOutput(String),
 
-    /// A request field this executor has no way to honor (e.g. an
-    /// `AgentRequest.mcp_config` handed to `CodexExecutor`, which has no
-    /// equivalent to Claude Code's `--mcp-config`/`--strict-mcp-config`).
-    /// Raised instead of silently dropping the field, per docs/09-security.md
-    /// (least privilege): an unenforced restriction must fail loud, not
-    /// quietly run with weaker guarantees than the caller asked for.
+    /// A request field this executor has no way to honor. Raised instead of
+    /// silently dropping the field, per docs/09-security.md (least
+    /// privilege): an unenforced restriction must fail loud, not quietly
+    /// run with weaker guarantees than the caller asked for.
     #[error("not supported by this executor: {0}")]
     Unsupported(String),
 
@@ -88,11 +84,90 @@ pub enum AgentError {
     Io(#[from] std::io::Error),
 }
 
+impl AgentError {
+    /// Whether the very same request might succeed on a second try — a
+    /// network blip or a provider-side rate limit/overload — as opposed to
+    /// a failure retrying would only reproduce identically.
+    /// `NotFound`/`Unsupported` are static misconfiguration; `MalformedOutput`
+    /// reflects the model's own output, not infrastructure, and must not be
+    /// retried (see `tests/execution_pipeline.rs`'s
+    /// `a_malformed_phase_response_fails_the_execution_without_retrying`).
+    /// Claude Code exposes no structured transient/permanent distinction on
+    /// a non-zero exit, so `NonZeroExit` falls back to a keyword sniff over
+    /// the CLI's own error text.
+    pub fn is_transient(&self) -> bool {
+        match self {
+            AgentError::Io(_) => true,
+            AgentError::NonZeroExit(detail) => is_transient_detail(detail),
+            AgentError::NotFound(_)
+            | AgentError::MalformedOutput(_)
+            | AgentError::Unsupported(_) => false,
+        }
+    }
+}
+
+fn is_transient_detail(detail: &str) -> bool {
+    const MARKERS: &[&str] = &[
+        "rate limit",
+        "rate_limit",
+        "overloaded",
+        "timed out",
+        "timeout",
+        "connection reset",
+        "econnreset",
+        "socket hang up",
+        "temporarily unavailable",
+        "service unavailable",
+        "502",
+        "503",
+        "529",
+    ];
+    let lower = detail.to_lowercase();
+    MARKERS.iter().any(|marker| lower.contains(marker))
+}
+
 /// Port to the coding/agent execution engine. `ksforge` never implements a
-/// competing agent loop behind this trait — every production impl spawns a
-/// real external coding-agent CLI (§CnK6mQd/§nLFQ2PQ): `ClaudeCodeExecutor`
-/// (`claude`) or `CodexExecutor` (`codex`, the OpenAI Codex CLI).
+/// competing agent loop behind this trait — the one production impl,
+/// `ClaudeCodeExecutor`, spawns the real `claude` CLI (§CnK6mQd/§nLFQ2PQ).
 #[async_trait]
 pub trait AgentExecutor: Send + Sync {
     async fn execute(&self, request: AgentRequest) -> Result<AgentResult, AgentError>;
+}
+
+#[cfg(test)]
+mod transient_tests {
+    use super::*;
+
+    #[test]
+    fn io_errors_are_transient() {
+        let err = AgentError::Io(std::io::Error::other("boom"));
+        assert!(err.is_transient());
+    }
+
+    #[test]
+    fn non_zero_exit_with_a_rate_limit_message_is_transient() {
+        let err = AgentError::NonZeroExit("Error: rate_limit_error, please retry".into());
+        assert!(err.is_transient());
+    }
+
+    #[test]
+    fn non_zero_exit_with_a_billing_message_is_not_transient() {
+        let err = AgentError::NonZeroExit("Credit balance is too low".into());
+        assert!(!err.is_transient());
+    }
+
+    #[test]
+    fn not_found_is_never_transient() {
+        assert!(!AgentError::NotFound("claude (not on PATH)".into()).is_transient());
+    }
+
+    #[test]
+    fn malformed_output_is_never_transient() {
+        assert!(!AgentError::MalformedOutput("no result event".into()).is_transient());
+    }
+
+    #[test]
+    fn unsupported_is_never_transient() {
+        assert!(!AgentError::Unsupported("mcp_config".into()).is_transient());
+    }
 }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::agent::{AgentExecutor, ClaudeCodeExecutor, CodexExecutor};
+use crate::agent::{AgentExecutor, ClaudeCodeExecutor};
 use crate::domain::{
     CapabilityRegistry, ChangeRequest, Execution, ExecutionContext, ExecutionEvent, ExecutionId,
     ExecutionStatus, ImplementationRequest, KsforgeError, Result, ValidationPolicy,
@@ -8,41 +8,25 @@ use crate::domain::{
 use crate::{github, workspace};
 
 use super::args::{
-    CancelArgs, ChangeRequestArgs, CommonArgs, CoordinateArgs, Engine, HandleCommentArgs,
-    OutputFormat, PostReportArgs, ResumeArgs, StatusArgs,
+    CancelArgs, ChangeRequestArgs, CommonArgs, CoordinateArgs, HandleCommentArgs, OutputFormat,
+    PostReportArgs, ResumeArgs, StatusArgs,
 };
 use super::output;
 
-/// Spawns the CLI selected by `--engine`, resolved from an explicit path or
-/// PATH (§fMSksqK).
+/// Discovers the Claude Code CLI, resolved from an explicit path or PATH
+/// (§fMSksqK).
 pub(crate) fn build_executor(
-    engine: Engine,
     claude_path: Option<&std::path::Path>,
-    codex_path: Option<&std::path::Path>,
 ) -> Result<Arc<dyn AgentExecutor>> {
-    match engine {
-        Engine::Claude => {
-            let executor = ClaudeCodeExecutor::discover(claude_path)
-                .map_err(|e| KsforgeError::ExecutorUnavailable(e.to_string()))?;
-            Ok(Arc::new(executor))
-        }
-        Engine::Codex => {
-            let executor = CodexExecutor::discover(codex_path)
-                .map_err(|e| KsforgeError::ExecutorUnavailable(e.to_string()))?;
-            Ok(Arc::new(executor))
-        }
-    }
+    let executor = ClaudeCodeExecutor::discover(claude_path)
+        .map_err(|e| KsforgeError::ExecutorUnavailable(e.to_string()))?;
+    Ok(Arc::new(executor))
 }
 
-/// `--model` defaults to Claude Code's "sonnet" alias only for `--engine
-/// claude` (see `CommonArgs::model`'s doc comment) — passing that alias to
-/// Codex would be meaningless, so `--engine codex` leaves it unset instead,
-/// deferring to Codex's own configured default.
-pub(crate) fn resolve_model(engine: Engine, model: Option<String>) -> Option<String> {
-    match engine {
-        Engine::Claude => Some(model.unwrap_or_else(|| "sonnet".to_string())),
-        Engine::Codex => model,
-    }
+/// `--model` defaults to Claude Code's "sonnet" alias — see
+/// `CommonArgs::model`'s doc comment.
+pub(crate) fn resolve_model(model: Option<String>) -> Option<String> {
+    Some(model.unwrap_or_else(|| "sonnet".to_string()))
 }
 
 /// Report how a new change request relates to the workspace's other active
@@ -59,17 +43,13 @@ pub async fn coordinate(args: CoordinateArgs) -> Result<i32> {
     let change_request = load_change_request(args.change_request)?;
 
     let workspace_root = workspace::resolve_root(&args.workspace)?;
-    let executor = build_executor(
-        args.engine,
-        args.claude_path.as_deref(),
-        args.codex_path.as_deref(),
-    )?;
+    let executor = build_executor(args.claude_path.as_deref())?;
 
     let decision = crate::application::coordinate::coordinate(
         &workspace_root,
         &change_request,
         executor,
-        resolve_model(args.engine, args.model),
+        resolve_model(args.model),
         args.max_budget_usd,
     )
     .await?;
@@ -91,11 +71,7 @@ pub async fn change_request_capability(
         .get(capability_id)
         .expect("capability_id is one of the built-in ids wired in main.rs");
 
-    let executor = build_executor(
-        common.engine,
-        common.claude_path.as_deref(),
-        common.codex_path.as_deref(),
-    )?;
+    let executor = build_executor(common.claude_path.as_deref())?;
 
     let request = ImplementationRequest {
         change_request,
@@ -110,7 +86,7 @@ pub async fn change_request_capability(
     let context = ExecutionContext {
         executor,
         workspace_root: workspace_root.clone(),
-        model: resolve_model(common.engine, common.model.clone()),
+        model: resolve_model(common.model.clone()),
         max_budget_usd: common.max_budget_usd,
         dry_run: common.dry_run,
         mcp_config: common.mcp_config.clone(),
@@ -141,15 +117,11 @@ pub async fn resume(args: ResumeArgs) -> Result<i32> {
     let workspace_root = workspace::resolve_root(&common.workspace)?;
     let registry = CapabilityRegistry::with_defaults();
 
-    let executor = build_executor(
-        common.engine,
-        common.claude_path.as_deref(),
-        common.codex_path.as_deref(),
-    )?;
+    let executor = build_executor(common.claude_path.as_deref())?;
     let context = ExecutionContext {
         executor,
         workspace_root: workspace_root.clone(),
-        model: resolve_model(common.engine, common.model.clone()),
+        model: resolve_model(common.model.clone()),
         max_budget_usd: common.max_budget_usd,
         dry_run: common.dry_run,
         mcp_config: common.mcp_config.clone(),

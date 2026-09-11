@@ -6,20 +6,17 @@
 ksforge  = orchestration / product layer: change request, capability, policy,
            workflow, durable execution state, GitHub integration.
 
-Claude Code = the default coding/agent execution engine. Owns repository
+Claude Code = the coding/agent execution engine. Owns repository
               exploration, file editing, tool execution, reasoning.
-
-Codex CLI = the OpenAI-backed alternative execution engine, selected via
-            `--engine codex`. Same job as Claude Code, spawned instead of it.
 
 GitHub Actions = an automation runtime ksforge targets.
 ```
 
 Repository exploration, file editing, tool execution, and context
-management belong entirely to the spawned CLI — Claude Code by default, or
-the Codex CLI via `--engine codex`. ksforge's own job is turning a change
-request into a controlled request for that CLI to act on, and turning what
-comes back into something trustworthy and resumable.
+management belong entirely to the spawned Claude Code CLI. ksforge's own
+job is turning a change request into a controlled request for that CLI to
+act on, and turning what comes back into something trustworthy and
+resumable.
 
 ## Module layering
 
@@ -30,10 +27,9 @@ domain          vocabulary: ChangeRequest, Capability, Constraint,
                  see "The phase loop" below). No knowledge of Claude Code's
                  CLI flags or of Git.
 
-agent            the execution-engine port (AgentExecutor) and its production
-                 implementations — ClaudeCodeExecutor (spawns `claude`) and
-                 CodexExecutor (spawns `codex`, the OpenAI Codex CLI),
-                 selected via `--engine`.
+agent            the execution-engine port (AgentExecutor) and its one
+                 production implementation, ClaudeCodeExecutor (spawns
+                 `claude`).
 
 application      the one shared pipeline (execute::run_phase_loop, used by
                  both execute::run and resume::resume) plus one Capability
@@ -240,14 +236,7 @@ across every turn of one `Execution`.
   auto-denied on Windows the same way. This still stops short of
   `--permission-mode bypassPermissions` (Claude Code's own docs:
   "recommended only for sandboxes with no internet access" — too broad for
-  ksforge's typical CI runner, which does have internet access). The Codex
-  CLI has no equivalent gap: its `workspace-write` sandbox already covers
-  shell execution the same way it covers file edits (see
-  `agent::codex::CodexExecutor`'s own doc comment) — but also has no way to
-  permit shell without also permitting edits, unlike Claude Code's
-  `--tools`, so under `--engine codex` the VALIDATE turn's Edit/Write
-  restriction relies entirely on `application::execute`'s post-turn
-  workspace diff, not on the executor's own sandbox.
+  ksforge's typical CI runner, which does have internet access).
 - **`--json-schema`**: constrains every phase turn to the same flat
   `AgentOutcome` shape (`status`, `title?`, `summary`, `changed_files?`,
   `scope?`/`relevant_files?`/`existing_abstractions?`/`existing_tests?`/

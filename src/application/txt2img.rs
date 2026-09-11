@@ -7,8 +7,8 @@ use crate::domain::{
 /// Generate an image from a text prompt. Only runs when explicitly
 /// requested via `ksforge txt2img` — never bundled into `implement`/`fix`.
 /// Stub for now: no dependency on the standalone `ks-llm-image` crate
-/// (`apps/kosmos/libs/ks-llm-image`, which also backs [`super::img2img`]),
-/// which builds/tests independently of this repo's own CI
+/// (`apps/kosmos/libs/ks-llm-image`), which builds/tests independently of
+/// this repo's own CI
 /// (`.github/workflows/ci.yml` checks out only `chevp/ksforge`, so a local
 /// `path` dependency into the kosmos superrepo would break it there).
 pub struct Txt2Img;

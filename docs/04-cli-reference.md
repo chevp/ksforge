@@ -8,14 +8,13 @@ ksforge review     --change "..." | --change @<path>  [options]
 ksforge fix        --change "..." | --change @<path>  [options]
 ksforge explain    --change "..." | --change @<path>  [options]
 ksforge txt2img    --change "..." | --change @<path>  [options]
-ksforge img2img    --change "..." | --change @<path>  [options]
 ksforge test       --change "..." | --change @<path>  [options]
 ksforge resume <execution-id> --decision <option-id> [--decided-by <who>] [options]
 ksforge status [<execution-id>] [--workspace <path>] [--format text|json]
 ksforge cancel <execution-id> [--reason <text>] [--workspace <path>] [--format text|json]
 ksforge post-report <execution-id> --pr <number> [--workspace <path>]
 ksforge handle-comment [--execution-id <id>] --comment-id <id> --commenter <login> --body <text> [--workspace <path>]
-ksforge coordinate --change "..." | --change @<path>  [--workspace <path>] [--engine ...] [--model ...] [--format text|json]
+ksforge coordinate --change "..." | --change @<path>  [--workspace <path>] [--model ...] [--format text|json]
 ksforge capabilities
 ```
 
@@ -73,30 +72,28 @@ line) runs one `Execution` per turn, waiting-for-human gates are answered
 inline, and a completed turn with changes is branched, committed, and
 optionally merged into `--base-branch` locally (no `gh`, no push, no PR).
 See [12-interactive-chat.md](12-interactive-chat.md) for the full session
-flow and its own option table (`--workspace`, `--engine`, `--model`,
-`--max-budget-usd`, `--claude-path`/`--codex-path`, `--dry-run`,
+flow and its own option table (`--workspace`, `--model`,
+`--max-budget-usd`, `--claude-path`, `--dry-run`,
 `--validate`, `--base-branch`, `--mcp-config` — a subset of the flags
 below; chat has no `--format`/`--create-pull-request`/`--push-to-branch`).
 `ksforge chat` requires `--workspace` to be a git repository, unlike the
 capability commands below.
 
-## Options shared by `implement`/`review`/`fix`/`explain`/`txt2img`/`img2img`/`test`/`resume`
+## Options shared by `implement`/`review`/`fix`/`explain`/`txt2img`/`test`/`resume`
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `--workspace <path>` | `.` | Workspace root. No GitHub token needed locally. |
-| `--engine claude\|codex` | `claude` | Which coding agent CLI to spawn: Claude Code, or the OpenAI Codex CLI. |
-| `--model <name>` | `sonnet` for `--engine claude`; Codex's own default for `--engine codex` | Alias (`sonnet`) or full name (`claude-sonnet-5`) for Claude Code, or a Codex model name. For `claude`, overrides ksforge's own default, not just Claude Code's. |
-| `--max-budget-usd <n>` | none | Passed through to Claude Code's own budget cap. Claude Code only — `--engine codex` with this set fails the run (no Codex CLI equivalent). |
+| `--model <name>` | `sonnet` | Alias (`sonnet`) or full name (`claude-sonnet-5`) for Claude Code. Overrides ksforge's own default, not just Claude Code's. |
+| `--max-budget-usd <n>` | none | Passed through to Claude Code's own budget cap. |
 | `--claude-path <path>` | PATH lookup | Also settable via `KSFORGE_CLAUDE_PATH`. |
-| `--codex-path <path>` | PATH lookup | Also settable via `KSFORGE_CODEX_PATH`. Only used with `--engine codex`. |
 | `--dry-run` | off | Isolated temp copy; never writes to the real workspace. |
 | `--validate <cmd>` | none | Repeatable. Runs after success, before trusting the result. |
 | `--format text\|json` | `text` | `json` mode: stdout is exactly one JSON object. |
 | `--create-pull-request` | off | Opens a PR via `gh` if the run completed with changes. Conflicts with `--push-to-branch`. |
 | `--base-branch <name>` | `main` | Base branch for `--create-pull-request`. |
 | `--push-to-branch` | off | Commits and pushes to the already-checked-out branch instead of opening a new PR — for a comment-driven follow-up run against an existing PR's branch. Conflicts with `--create-pull-request`. |
-| `--mcp-config <path>` | none | Passed through to Claude Code as `--mcp-config <path> --strict-mcp-config` — see [11-integrations.md](11-integrations.md). Claude Code only — `--engine codex` with this set fails the run (no Codex CLI equivalent). |
+| `--mcp-config <path>` | none | Passed through to Claude Code as `--mcp-config <path> --strict-mcp-config` — see [11-integrations.md](11-integrations.md). |
 
 ## Waiting for human input: console vs. CI
 
@@ -125,7 +122,7 @@ stdin *and* stdout are both real terminals
 | `0` | Completed successfully. |
 | `1` | General/application failure (workspace error, GitHub integration error, unknown execution id, cancelled). |
 | `2` | Invalid CLI usage or configuration (e.g. `--change` missing, or its `@<path>` file unreadable). |
-| `3` | The selected `--engine` CLI is unavailable, or its execution failed/produced unparseable output. |
+| `3` | The Claude Code CLI is unavailable, or its execution failed/produced unparseable output. |
 | `4` | A `--validate` command failed. |
 | `5` | Reserved for policy/safety-violation failures (not currently raised by any built-in capability, but part of the stable taxonomy — see `KsforgeError::PolicyViolation`). |
 | `6` | The execution paused with `status: waiting_for_human` — not an error. Resume it with `ksforge resume <id> --decision <option-id>`. |

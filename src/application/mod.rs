@@ -7,7 +7,6 @@ pub mod coordinate;
 pub mod execute;
 pub mod explain;
 pub mod fix;
-pub mod img2img;
 pub mod implement;
 pub mod prompt;
 pub mod resume;

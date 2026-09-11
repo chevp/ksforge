@@ -40,10 +40,9 @@ today (see `CommonArgs` in `04-cli-reference.md`):
 | Flag | Default | Meaning |
 |---|---|---|
 | `--workspace <path>` | `.` | Workspace root. Any directory — a single repo, a plain non-git folder, or a folder holding several independent repos (each changed file is attributed to its own nearest repo at merge-back time, see step 4 below). |
-| `--engine claude\|codex` | `claude` | Same as today. |
-| `--model <name>` | `sonnet` for `claude`, Codex's own default for `codex` | Same as today. |
+| `--model <name>` | `sonnet` | Same as today. |
 | `--max-budget-usd <n>` | none | Same as today. Applies per chat turn, not to the whole session. |
-| `--claude-path` / `--codex-path <path>` | PATH lookup | Same as today. |
+| `--claude-path <path>` | PATH lookup | Same as today. |
 | `--dry-run` | off | Same isolation as today — see [03-architecture.md](03-architecture.md). With `--dry-run`, nothing is ever branched/committed/merged either, since there is no real workspace to touch. |
 | `--validate <cmd>` | none | Repeatable. Same as today, applied to every turn. |
 | `--base-branch <name>` | `main` | The branch chat merges completed changes back into, after confirmation. |

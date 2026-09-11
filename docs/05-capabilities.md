@@ -1,6 +1,6 @@
 # Capabilities
 
-A capability is what kind of operation ksforge is orchestrating. All seven
+A capability is what kind of operation ksforge is orchestrating. All six
 share one execution pipeline (`application::execute::run`); each only
 supplies policy.
 
@@ -22,7 +22,6 @@ it runs its own path rather than the shared
 | `review` | `Read,Grep,Glob` only | never | none | no |
 | `explain` | `Read,Grep,Glob` only | never | none | no |
 | `txt2img` | default (full) | yes | none | no |
-| `img2img` | default (full) | yes | none | no |
 | `test` | default (full) | yes | tests only | yes |
 
 `review` and `explain` never offer the human-in-the-loop protocol in their
@@ -55,13 +54,11 @@ file's change was *only* to its test portion, only that the file plausibly
 contains tests at all; see the doc comment on `domain::test_scope` for the
 exact reasoning.
 
-`txt2img` (`src/application/txt2img.rs`) and `img2img`
-(`src/application/img2img.rs`) are stubs: each generates a placeholder
-artifact rather than calling a real image model, and neither depends yet on
-the standalone `ks-llm-image` crate (`apps/kosmos/libs/ks-llm-image`) — a
-single crate meant to back multiple image-generation capabilities, building
-and testing independently of this repo. Each only runs when explicitly
-invoked via its own subcommand (`ksforge txt2img` / `ksforge img2img`),
+`txt2img` (`src/application/txt2img.rs`) is a stub: it generates a
+placeholder artifact rather than calling a real image model, and does not
+depend yet on the standalone `ks-llm-image` crate
+(`apps/kosmos/libs/ks-llm-image`), which builds and tests independently of
+this repo. It only runs when explicitly invoked via `ksforge txt2img`,
 never as part of `implement`/`fix`.
 
 ## Adding a capability

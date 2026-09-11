@@ -118,15 +118,11 @@ async fn run_turn(
         .get(capability_id)
         .expect("capability_id is one of the built-in ids routed in `route`");
 
-    let executor = build_executor(
-        args.engine,
-        args.claude_path.as_deref(),
-        args.codex_path.as_deref(),
-    )?;
+    let executor = build_executor(args.claude_path.as_deref())?;
     let context = ExecutionContext {
         executor,
         workspace_root: workspace_root.to_path_buf(),
-        model: resolve_model(args.engine, args.model.clone()),
+        model: resolve_model(args.model.clone()),
         max_budget_usd: args.max_budget_usd,
         dry_run: args.dry_run,
         mcp_config: args.mcp_config.clone(),
@@ -159,15 +155,11 @@ async fn resume_turn(
     execution_id: &ExecutionId,
     decision: String,
 ) -> Result<Option<ExecutionId>> {
-    let executor = build_executor(
-        args.engine,
-        args.claude_path.as_deref(),
-        args.codex_path.as_deref(),
-    )?;
+    let executor = build_executor(args.claude_path.as_deref())?;
     let context = ExecutionContext {
         executor,
         workspace_root: workspace_root.to_path_buf(),
-        model: resolve_model(args.engine, args.model.clone()),
+        model: resolve_model(args.model.clone()),
         max_budget_usd: args.max_budget_usd,
         dry_run: args.dry_run,
         mcp_config: args.mcp_config.clone(),

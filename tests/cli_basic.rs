@@ -6,7 +6,7 @@ fn ksforge() -> Command {
 }
 
 #[test]
-fn help_lists_the_eight_verbs() {
+fn help_lists_the_seven_verbs() {
     ksforge()
         .arg("--help")
         .assert()
@@ -16,7 +16,6 @@ fn help_lists_the_eight_verbs() {
         .stdout(predicate::str::contains("fix"))
         .stdout(predicate::str::contains("explain"))
         .stdout(predicate::str::contains("txt2img"))
-        .stdout(predicate::str::contains("img2img"))
         .stdout(predicate::str::contains("test"))
         .stdout(predicate::str::contains("resume"));
 }
@@ -27,7 +26,7 @@ fn version_flag_works() {
 }
 
 #[test]
-fn capabilities_lists_all_seven() {
+fn capabilities_lists_all_six() {
     ksforge()
         .arg("capabilities")
         .assert()
@@ -37,7 +36,6 @@ fn capabilities_lists_all_seven() {
         .stdout(predicate::str::contains("fix"))
         .stdout(predicate::str::contains("explain"))
         .stdout(predicate::str::contains("txt2img"))
-        .stdout(predicate::str::contains("img2img"))
         .stdout(predicate::str::contains("test"));
 }
 

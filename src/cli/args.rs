@@ -36,8 +36,6 @@ pub enum Command {
     Explain(ChangeRequestArgs),
     /// Generate an image from a text prompt (stub, no real backend yet).
     Txt2img(ChangeRequestArgs),
-    /// Transform an existing image per a text prompt (stub, no real backend yet).
-    Img2img(ChangeRequestArgs),
     /// Add or update tests only; rejects non-test file changes.
     Test(ChangeRequestArgs),
     /// Continue a paused execution with a human decision.
@@ -63,14 +61,6 @@ pub enum OutputFormat {
     Json,
 }
 
-/// Which coding agent CLI ksforge spawns for this run.
-#[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Engine {
-    #[default]
-    Claude,
-    Codex,
-}
-
 #[derive(Args)]
 pub struct ChangeRequestArgs {
     /// The change request text, or `@<path>` to read it from a file instead.
@@ -94,12 +84,8 @@ pub struct CoordinateArgs {
     #[arg(long, default_value = ".")]
     pub workspace: PathBuf,
 
-    /// Which coding agent CLI to spawn.
-    #[arg(long, value_enum, default_value_t = Engine::Claude)]
-    pub engine: Engine,
-
-    /// Model alias or full name — see `CommonArgs::model`'s doc comment
-    /// for the same `--engine`-dependent default behavior.
+    /// Model alias or full name — see `CommonArgs::model`'s doc comment for
+    /// the default-value behavior.
     #[arg(long)]
     pub model: Option<String>,
 
@@ -109,9 +95,6 @@ pub struct CoordinateArgs {
 
     #[arg(long, env = "KSFORGE_CLAUDE_PATH", value_name = "PATH")]
     pub claude_path: Option<PathBuf>,
-
-    #[arg(long, env = "KSFORGE_CODEX_PATH", value_name = "PATH")]
-    pub codex_path: Option<PathBuf>,
 
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
@@ -127,12 +110,8 @@ pub struct ChatArgs {
     #[arg(long, default_value = ".")]
     pub workspace: PathBuf,
 
-    /// Which coding agent CLI to spawn.
-    #[arg(long, value_enum, default_value_t = Engine::Claude)]
-    pub engine: Engine,
-
-    /// Model alias or full name — same `--engine`-dependent default
-    /// behavior as `CommonArgs::model`.
+    /// Model alias or full name — same default behavior as
+    /// `CommonArgs::model`.
     #[arg(long)]
     pub model: Option<String>,
 
@@ -143,9 +122,6 @@ pub struct ChatArgs {
 
     #[arg(long, env = "KSFORGE_CLAUDE_PATH", value_name = "PATH")]
     pub claude_path: Option<PathBuf>,
-
-    #[arg(long, env = "KSFORGE_CODEX_PATH", value_name = "PATH")]
-    pub codex_path: Option<PathBuf>,
 
     /// Run every turn in an isolated temporary copy of the workspace.
     #[arg(long)]
@@ -172,18 +148,15 @@ pub struct ChatArgs {
 }
 
 /// Built when `ksforge` is invoked with no subcommand at all — bypasses
-/// clap parsing entirely, so `KSFORGE_CLAUDE_PATH`/`KSFORGE_CODEX_PATH` are
-/// read directly here to keep that one behavior clap's `env` attribute
-/// would otherwise provide.
+/// clap parsing entirely, so `KSFORGE_CLAUDE_PATH` is read directly here to
+/// keep that one behavior clap's `env` attribute would otherwise provide.
 impl Default for ChatArgs {
     fn default() -> Self {
         Self {
             workspace: PathBuf::from("."),
-            engine: Engine::default(),
             model: None,
             max_budget_usd: None,
             claude_path: std::env::var_os("KSFORGE_CLAUDE_PATH").map(PathBuf::from),
-            codex_path: std::env::var_os("KSFORGE_CODEX_PATH").map(PathBuf::from),
             dry_run: false,
             validate: Vec::new(),
             no_validate: false,
@@ -285,29 +258,17 @@ pub struct CommonArgs {
     #[arg(long, default_value = ".")]
     pub workspace: PathBuf,
 
-    /// Which coding agent CLI to spawn. codex rejects
-    /// `--mcp-config`/`--max-budget-usd`.
-    #[arg(long, value_enum, default_value_t = Engine::Claude)]
-    pub engine: Engine,
-
-    /// Model alias or full name. Defaults to "sonnet" for `--engine claude`;
-    /// `--engine codex` uses Codex's own default.
+    /// Model alias or full name. Defaults to "sonnet".
     #[arg(long)]
     pub model: Option<String>,
 
-    /// Maximum dollar amount the agent may spend on this run. Claude Code
-    /// only; the Codex CLI has no equivalent flag.
+    /// Maximum dollar amount the agent may spend on this run.
     #[arg(long)]
     pub max_budget_usd: Option<f64>,
 
     /// Explicit path to the Claude Code executable; otherwise resolved from PATH.
     #[arg(long, env = "KSFORGE_CLAUDE_PATH", value_name = "PATH")]
     pub claude_path: Option<PathBuf>,
-
-    /// Explicit path to the Codex CLI executable; otherwise resolved from
-    /// PATH. Only used with `--engine codex`.
-    #[arg(long, env = "KSFORGE_CODEX_PATH", value_name = "PATH")]
-    pub codex_path: Option<PathBuf>,
 
     /// Run in an isolated temporary copy of the workspace; nothing is written back.
     #[arg(long)]

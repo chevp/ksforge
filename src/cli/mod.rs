@@ -31,7 +31,6 @@ pub async fn run() -> i32 {
         Some(Command::Fix(args)) => commands::change_request_capability("fix", args).await,
         Some(Command::Explain(args)) => commands::change_request_capability("explain", args).await,
         Some(Command::Txt2img(args)) => commands::change_request_capability("txt2img", args).await,
-        Some(Command::Img2img(args)) => commands::change_request_capability("img2img", args).await,
         Some(Command::Test(args)) => commands::change_request_capability("test", args).await,
         Some(Command::Resume(args)) => commands::resume(args).await,
         Some(Command::Status(args)) => commands::status(args).await,
