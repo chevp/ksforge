@@ -14,14 +14,17 @@ real project to justify a config file yet.
 |---|---|
 | `KSFORGE_CLAUDE_PATH` | Same as `--claude-path`; explicit path to the `claude` executable. |
 | `ANTHROPIC_API_KEY` (or whatever Claude Code's own auth needs) | Never read by ksforge — stays in the environment for the spawned `claude` process to use. See [09-security.md](09-security.md). |
+| `KSFORGE_HANDOFF_ROUTINE_URL` | Same as `--handoff-session`; the routine fire URL to hand a paused decision to. |
+| `KSFORGE_HANDOFF_TOKEN` | Bearer token for that routine. **Environment only** — deliberately not a flag, so it never lands in a process argument list a runner's `ps` can read. |
+| `KSFORGE_HANDOFF_BETA` | Overrides the `anthropic-beta` header the routine `/fire` endpoint ships under (default `experimental-cc-routine-2026-04-01`). The endpoint is a research preview and Anthropic version its header, so this can be bumped without waiting for a ksforge release. |
 
 ## Per-run configuration
 
 Everything else is a flag on the command in question — see
 [04-cli-reference.md](04-cli-reference.md) for the full table
 (`--workspace`, `--model`, `--max-budget-usd`, `--validate`, `--dry-run`,
-`--format`, `--create-pull-request`, `--base-branch`, `--mcp-config`) or
-`action.yml` for the GitHub Actions equivalents.
+`--format`, `--create-pull-request`, `--base-branch`, `--mcp-config`,
+`--handoff-session`) or `action.yml` for the GitHub Actions equivalents.
 
 `--mcp-config` points at a file, but is not itself a ksforge config file —
 that file is Claude Code's own MCP config format, unparsed and unvalidated

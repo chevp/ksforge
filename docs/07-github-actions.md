@@ -133,6 +133,60 @@ jobs:
           echo "::notice::Paused. Re-run this workflow with a follow-up job passing execution-id=${{ steps.ksforge.outputs.execution-id }} and decision=<option-id>."
 ```
 
+Note that `format: "json"` is what populates `steps.ksforge.outputs.*`; in
+the default `text` mode the action has nothing to parse and every output is
+empty. The example above works because the reusable template sets it — see
+[examples/workflows/change-request-to-ksforge.yml](../examples/workflows/change-request-to-ksforge.yml).
+
+## Letting a human answer the decision in a chat session
+
+The `waiting_for_human` round trip above is durable but not pleasant: the
+question only exists in a job log and a PR comment, and answering it means
+dispatching a second run with the right `execution-id`/`decision` pair.
+
+`handoff-routine-url` opens the same gate as a claude.ai/code session, so a
+human can talk it through — from a browser or the mobile app — and run the
+resume the session tells them to. The gate, the PR comment, the exit code
+and `execution-id`/`decision` all keep working exactly as before; this only
+adds a channel. Set the routine up first, prompt included, per
+[06-human-in-the-loop.md](06-human-in-the-loop.md#answering-a-gate-conversationally---handoff-session).
+
+```yaml
+      - uses: chevp/ksforge@v1
+        id: ksforge
+        with:
+          change-request: ${{ inputs.change-request }}
+          capability: implement
+          create-pull-request: "true"
+          format: "json"
+          handoff-routine-url: ${{ vars.KSFORGE_HANDOFF_ROUTINE_URL }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Not an action input on purpose: a bearer token passed as one
+          # would be rendered into the workflow's own YAML.
+          KSFORGE_HANDOFF_TOKEN: ${{ secrets.KSFORGE_HANDOFF_TOKEN }}
+
+      - name: Note pending decision
+        if: steps.ksforge.outputs.status == 'waiting_for_human'
+        run: |
+          echo "::notice::Paused — answer it at ${{ steps.ksforge.outputs.handoff-session-url }}"
+```
+
+The job still exits `6` and ends; nothing blocks waiting for the human.
+When the handoff succeeds the action also writes the link to the job
+summary, so it is one click from the run page.
+
+Three things worth knowing before you wire this into a busy repository:
+
+- Routines are **per personal claude.ai account** and have a **daily run
+  cap**; a workflow that gates often will exhaust it. Commits and comments
+  the session makes appear under that account's GitHub identity.
+- The `/fire` endpoint is a research preview behind a dated beta header.
+- A failed fire is never fatal: ksforge warns, prints the `ksforge resume`
+  command, and leaves the execution paused and resumable. Treat the handoff
+  as a convenience on top of the PR-comment round trip, not a replacement
+  for it.
+
 Read-only review-only workflow needs less:
 
 ```yaml

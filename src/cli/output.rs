@@ -61,6 +61,7 @@ fn as_json(execution: &Execution) -> serde_json::Value {
         "capability": execution.capability,
         "status": execution.status.to_string(),
         "pending_question": execution.pending_question,
+        "handoff_session_url": execution.handoff_session_url,
         "gates": execution.gates,
         "result": execution.result,
         "artifacts": execution.artifacts,
@@ -104,6 +105,11 @@ fn print_human(execution: &Execution) {
                     if !q.context.is_empty() {
                         println!("  {}", q.context);
                     }
+                }
+                if let Some(url) = &execution.handoff_session_url {
+                    println!();
+                    println!("Continue the conversation:");
+                    println!("  {url}");
                 }
                 println!();
                 println!(

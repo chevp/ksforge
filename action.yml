@@ -52,6 +52,9 @@ inputs:
   mcp-config:
     description: "Path (relative to the checkout root) to a Claude Code --mcp-config JSON file, for optional MCP integrations. See docs/11-integrations.md."
     required: false
+  handoff-routine-url:
+    description: "Fire URL of a claude.ai routine with an API trigger. When a run pauses waiting_for_human, ksforge fires it so a human can answer the decision in a claude.ai/code session instead of only via a second workflow run. Needs the KSFORGE_HANDOFF_TOKEN secret in `env`. See docs/06-human-in-the-loop.md."
+    required: false
   version:
     description: "ksforge release tag to install, e.g. v0.1.0. Defaults to the latest release."
     required: false
@@ -61,17 +64,30 @@ inputs:
     required: false
     default: "latest"
 
+# A composite action's outputs are only wired to a step when they carry an
+# explicit `value:` — without one GitHub resolves them to the empty string,
+# however faithfully the inner step writes to $GITHUB_OUTPUT. Every output
+# below is produced by the `Run ksforge` step (id: run) in `--format json`
+# mode; in `text` mode they are empty, as they always were.
 outputs:
   status:
     description: "completed, waiting_for_human, or failed."
+    value: ${{ steps.run.outputs.status }}
   execution-id:
     description: "The execution id — pass back via `execution-id` in a follow-up run to resume."
+    value: ${{ steps.run.outputs.execution-id }}
   changed-files:
     description: "Newline-separated list of changed files."
+    value: ${{ steps.run.outputs.changed-files }}
   summary:
     description: "The execution's summary text."
+    value: ${{ steps.run.outputs.summary }}
   pull-request-url:
     description: "URL of the opened pull request, when create-pull-request produced one."
+    value: ${{ steps.run.outputs.pull-request-url }}
+  handoff-session-url:
+    description: "URL of the claude.ai/code session a paused decision was handed to, when handoff-routine-url produced one."
+    value: ${{ steps.run.outputs.handoff-session-url }}
 
 runs:
   using: "composite"
@@ -143,6 +159,11 @@ runs:
         KSFORGE_BASE_BRANCH: ${{ inputs.base-branch }}
         KSFORGE_FORMAT: ${{ inputs.format }}
         KSFORGE_MCP_CONFIG: ${{ inputs.mcp-config }}
+        KSFORGE_HANDOFF_ROUTINE_URL: ${{ inputs.handoff-routine-url }}
+        # Read straight from the caller's `env:` — the routine bearer token
+        # is never an action input, so it cannot end up in a workflow's
+        # rendered YAML or in this step's argument list.
+        KSFORGE_HANDOFF_TOKEN: ${{ env.KSFORGE_HANDOFF_TOKEN }}
       # All free-form inputs (change-request, in particular) are read from env vars
       # here rather than interpolated as `${{ inputs.x }}` directly into
       # this script — GitHub Actions expands `${{ }}` as raw text
@@ -181,14 +202,21 @@ runs:
           exec_id=$(echo "$out" | jq -r '.execution_id // ""')
           summary=$(echo "$out" | jq -r '.result.summary // .pending_question.question // ""')
           changed=$(echo "$out" | jq -r '(.result.changed_files // [])[]' 2>/dev/null || true)
+          handoff=$(echo "$out" | jq -r '.handoff_session_url // ""')
           echo "status=$status" >> "$GITHUB_OUTPUT"
           echo "execution-id=$exec_id" >> "$GITHUB_OUTPUT"
           echo "summary=$summary" >> "$GITHUB_OUTPUT"
+          echo "handoff-session-url=$handoff" >> "$GITHUB_OUTPUT"
           echo "changed-files<<KSFORGE_FILES" >> "$GITHUB_OUTPUT"
           echo "$changed" >> "$GITHUB_OUTPUT"
           echo "KSFORGE_FILES" >> "$GITHUB_OUTPUT"
           if [ "$status" = "waiting_for_human" ]; then
-            echo "::notice::ksforge is waiting for a human decision — see the run output for the question and options, then re-run this workflow with execution-id/decision set."
+            if [ -n "$handoff" ]; then
+              echo "::notice::ksforge is waiting for a human decision — answer it in $handoff, or re-run this workflow with execution-id/decision set."
+              { echo "### ksforge needs a decision"; echo; echo "[Answer it in a Claude Code session]($handoff)"; } >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::notice::ksforge is waiting for a human decision — see the run output for the question and options, then re-run this workflow with execution-id/decision set."
+            fi
           elif [ "$status" = "failed" ]; then
             echo "::error::ksforge run failed: $summary"
           fi

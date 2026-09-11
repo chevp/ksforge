@@ -96,7 +96,8 @@ pub async fn change_request_capability(
         "Running {capability_id}{}...",
         if common.dry_run { " (dry run)" } else { "" }
     ));
-    let execution = capability.execute(request, context.clone()).await?;
+    let mut execution = capability.execute(request, context.clone()).await?;
+    maybe_hand_off(&workspace_root, &mut execution, &common).await;
     output::print_execution(&execution, common.format);
     let execution = prompt_and_resume_while_waiting(
         execution,
@@ -128,7 +129,7 @@ pub async fn resume(args: ResumeArgs) -> Result<i32> {
     };
 
     output::eprint_notice(&format!("Resuming {}...", args.execution_id));
-    let execution = crate::application::resume::resume(
+    let mut execution = crate::application::resume::resume(
         &workspace_root,
         &ExecutionId(args.execution_id),
         args.decision,
@@ -137,6 +138,7 @@ pub async fn resume(args: ResumeArgs) -> Result<i32> {
         context.clone(),
     )
     .await?;
+    maybe_hand_off(&workspace_root, &mut execution, &common).await;
     output::print_execution(&execution, common.format);
     let execution = prompt_and_resume_while_waiting(
         execution,
@@ -150,6 +152,80 @@ pub async fn resume(args: ResumeArgs) -> Result<i32> {
     maybe_open_pull_request(&workspace_root, &execution, &common).await?;
 
     Ok(exit_code_for(&execution))
+}
+
+/// The CI counterpart of [`prompt_and_resume_while_waiting`]: where a real
+/// terminal gets prompted for the decision in-process, a non-interactive run
+/// hands the open gate to a claude.ai/code session so a human can answer it
+/// conversationally later, from wherever they are (`--handoff-session`, see
+/// docs/06-human-in-the-loop.md). Runs before `print_execution` so the
+/// session URL is part of this run's reported state — the GitHub Action
+/// reads it out of the `--format json` payload.
+///
+/// Never returns an error: the gate is already durable and `ksforge resume`
+/// already works without any of this, so a failed handoff must not turn a
+/// resumable pause into a failed run. Problems are reported on stderr and
+/// the exit code stays `6`.
+async fn maybe_hand_off(
+    workspace_root: &std::path::Path,
+    execution: &mut Execution,
+    common: &CommonArgs,
+) {
+    let Some(routine_url) = common.handoff_session.as_deref() else {
+        return;
+    };
+    if execution.status != ExecutionStatus::WaitingForHuman || execution.open_gate().is_none() {
+        return;
+    }
+    if common.dry_run {
+        output::eprint_notice(
+            "--dry-run: skipping the --handoff-session routine fire (a dry run must not \
+             open a real cloud session).",
+        );
+        return;
+    }
+    if output::is_interactive() {
+        // A console operator is about to be prompted for the decision right
+        // here; a cloud session would be answered by nobody.
+        return;
+    }
+
+    let config = match crate::handoff::Config::resolve(routine_url) {
+        Ok(config) => config,
+        Err(e) => {
+            eprintln!("ksforge: --handoff-session not usable: {e}");
+            eprintln!(
+                "ksforge: the gate is still open — resume it with: ksforge resume {} \
+                 --decision <option-id>",
+                execution.id
+            );
+            return;
+        }
+    };
+
+    match crate::handoff::fire(workspace_root, &config, execution).await {
+        Ok(session) => {
+            execution.record_handoff(session.session_url.clone());
+            // Best-effort persist: the in-memory execution is what this run
+            // reports either way, but a later `ksforge status` should show
+            // the link too.
+            if let Err(e) = workspace::ExecutionStore::new(workspace_root).save(execution) {
+                eprintln!("ksforge: could not persist the handoff session URL: {e}");
+            }
+            output::eprint_notice(&format!(
+                "Handed the open decision to {}",
+                session.session_url
+            ));
+        }
+        Err(e) => {
+            eprintln!("ksforge: handing the decision to a cloud session failed: {e}");
+            eprintln!(
+                "ksforge: the gate is still open — resume it with: ksforge resume {} \
+                 --decision <option-id>",
+                execution.id
+            );
+        }
+    }
 }
 
 /// After a run/resume pauses `waiting_for_human`, keep asking for a

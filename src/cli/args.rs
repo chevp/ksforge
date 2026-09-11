@@ -307,4 +307,18 @@ pub struct CommonArgs {
     /// Path to a Claude Code `--mcp-config` file, passed straight through.
     #[arg(long, value_name = "PATH")]
     pub mcp_config: Option<PathBuf>,
+
+    /// Fire URL of a claude.ai routine with an API trigger. When a run
+    /// pauses `waiting_for_human` in CI, ksforge fires it so a human can
+    /// answer the gate in a claude.ai/code session instead of only via a
+    /// second workflow run. Additive — the gate stays open and `ksforge
+    /// resume` keeps working. The routine's bearer token is read from
+    /// `KSFORGE_HANDOFF_TOKEN`, never from a flag. See docs/06.
+    #[arg(
+        long,
+        value_name = "URL",
+        env = "KSFORGE_HANDOFF_ROUTINE_URL",
+        hide_env_values = true
+    )]
+    pub handoff_session: Option<String>,
 }

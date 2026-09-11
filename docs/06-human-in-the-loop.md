@@ -163,6 +163,103 @@ disappears the moment a job ends. Two complementary answers:
 
    See the third example workflow in [07-github-actions.md](07-github-actions.md).
 
+## Answering a gate conversationally (`--handoff-session`)
+
+The two-run split above is correct for CI, but it is a poor experience for
+the human in the middle: to answer "OAuth2 or JWT?" they have to find the
+job log, read the question out of it, and dispatch a second workflow run
+with `execution-id` and `decision` set. There is no way to ask a follow-up
+question, and no way to answer from a phone.
+
+`--handoff-session <url>` adds a second channel for the *same* gate. When a
+non-interactive run pauses, ksforge fires a [claude.ai routine][routines]
+with an API trigger; the routine starts a Claude Code cloud session and
+returns its URL, which ksforge records on the execution and reports. A
+human opens that link and talks the decision through.
+
+```text
+ksforge implement            (GitHub Actions job — exits 6, job ends)
+  |
+  +-- gate persisted to .ksforge/executions/<id>/state.json
+  +-- gate posted to the PR comment          (unchanged)
+  +-- gate fired at the routine  ----------> https://claude.ai/code/session_...
+                                                  |
+                                             human opens it, discusses,
+                                             and runs the resume it names
+```
+
+### It is additive, not a replacement
+
+The handoff does **not** move the workflow into the cloud session. ksforge
+still owns the execution state; the session is somewhere to hold the
+conversation. Concretely:
+
+- the gate stays open and `status` stays `waiting_for_human`
+- the exit code stays `6`
+- `ksforge resume <id> --decision <option-id>` works exactly as before, and
+  is what the payload tells the session to have you run
+- `/ksforge choose <option-id>` on the PR still works
+- a handoff that fails **never fails the run** — ksforge warns on stderr,
+  repeats the resume command, and leaves the paused execution alone
+
+This is the point. A cloud session is a full autonomous Claude Code
+session; it is not driven by ksforge, it has no `Execution`, and it does
+not run your `--validate` commands. Letting it *answer* a gate keeps every
+guarantee in [08-validation.md](08-validation.md) and
+[13-model-outside-orchestration.md](13-model-outside-orchestration.md);
+letting it *replace* the gate would throw all of them away.
+
+### Setting up the routine
+
+1. At [claude.ai/code/routines](https://claude.ai/code/routines), create a
+   routine, select the repository, and give it the prompt below.
+2. **Edit routine → Select a trigger → Add another trigger → API.** Copy
+   the fire URL, click **Generate token**, and copy the token — it is shown
+   once.
+3. Pass the URL as `--handoff-session` (or `handoff-routine-url` in the
+   action) and the token as the `KSFORGE_HANDOFF_TOKEN` secret.
+
+The routine prompt has to opt in to the payload explicitly:
+
+```text
+A ksforge execution has paused for a human decision. The details are in the
+routine-fire-payload block: the execution id, the question, the option ids,
+ksforge's recommendation, and what was already completed.
+
+Read the payload, then investigate the repository enough to explain the
+trade-off between the options in concrete terms for THIS codebase. Present
+the options and your own recommendation, and wait for the person to choose.
+
+Do not implement the change yourself and do not push anything: ksforge owns
+this execution. Once they have chosen, run the `ksforge resume` command the
+payload names, with their option id.
+```
+
+That opt-in is not optional. Anthropic wrap the `text` of a fire request in
+a `<routine-fire-payload>` block labelled as untrusted data, precisely
+because anyone holding the bearer token can send one — a routine whose
+prompt does not reference the payload treats it as inert context and the
+handoff silently does nothing.
+
+### Cost and limits, honestly
+
+- Routines belong to one **personal** claude.ai account, not to an
+  organization. Anything the session does through your GitHub identity
+  appears as you.
+- Runs draw down that account's subscription usage and there is a **daily
+  cap** on routine runs. A workflow that gates often will hit it.
+- The `/fire` endpoint is a **research preview** behind a dated beta header
+  (`KSFORGE_HANDOFF_BETA`, see [10-configuration.md](10-configuration.md)).
+- `--dry-run` never fires: a dry run must not open a real cloud session.
+- An interactive console never fires either — you are about to be prompted
+  for the decision in-process, so a session would be answered by nobody.
+
+The token is read from the environment and written to `curl`'s stdin as a
+header, never passed as an argument, so it does not appear in a runner's
+process list. See [09-security.md](09-security.md).
+
+[routines]: https://code.claude.com/docs/en/routines
+
 ## What does *not* survive across a paused GitHub Actions job
 
 Be precise with users about this: Claude Code's in-progress file edits
