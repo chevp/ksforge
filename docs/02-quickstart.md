@@ -4,7 +4,7 @@
 export ANTHROPIC_API_KEY=...   # or however Claude Code auth is configured
 
 cd your-project
-ksforge implement --change-request "As a user, I want to reset my password via email."
+ksforge implement --change "As a user, I want to reset my password via email."
 ```
 
 What happens:
@@ -25,7 +25,7 @@ What happens:
 ## Dry run
 
 ```bash
-ksforge implement --change-request "..." --dry-run
+ksforge implement --change "..." --dry-run
 ```
 
 Runs Claude Code against an isolated temporary copy of your workspace.
@@ -65,8 +65,8 @@ Full depth on this in [06-human-in-the-loop.md](06-human-in-the-loop.md).
 ```bash
 ksforge review .                       # findings only, never writes
 ksforge explain src/auth.rs            # explanation only, never writes
-ksforge fix --change-request "Login times out after 30s under load"
-ksforge coordinate --change-request "..." # overlap/conflict risk vs. active executions, never writes
+ksforge fix --change "Login times out after 30s under load"
+ksforge coordinate --change "..." # overlap/conflict risk vs. active executions, never writes
 ksforge capabilities                   # list what's available
 ```
 

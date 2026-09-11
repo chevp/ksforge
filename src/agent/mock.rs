@@ -7,7 +7,7 @@ use super::executor::{AgentError, AgentExecutor, AgentRequest, AgentResult};
 
 /// A canned, deterministic stand-in for [`super::ClaudeCodeExecutor`], so
 /// tests (and this crate's own integration tests) never spawn a real
-/// `claude` process or spend real API budget (section 40).
+/// `claude` process or spend real API budget (§Djb7BJR).
 pub struct MockAgentExecutor {
     responses: Mutex<Vec<Value>>,
     requests: Arc<Mutex<Vec<AgentRequest>>>,

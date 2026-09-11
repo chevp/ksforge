@@ -1,77 +1,123 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::domain::{Execution, ExecutionResult, ExecutionStatus, Result};
 
 use super::process::{run_gh, run_git};
+use super::repo::group_by_repo;
 
 /// The only place in ksforge that knows about branches, commits, or pull
-/// requests (section 20 is mandatory: Git/GitHub are infrastructure, never
+/// requests (§HFNMflB is mandatory: Git/GitHub are infrastructure, never
 /// domain). Shells out to `git` and the `gh` CLI rather than reimplementing
 /// either.
 pub struct PullRequestOutcome {
+    /// Repo root (absolute) this branch/PR belongs to — a single execution
+    /// can touch several repos in a multi-repo workspace (docs/03-architecture.md,
+    /// "Workspace shapes"), so one execution may produce several outcomes.
+    pub repo: PathBuf,
     pub branch: String,
     pub url: Option<String>,
 }
 
+/// Result of a multi-repo git plumbing step: one [`PullRequestOutcome`] per
+/// repo actually touched, plus any changed files that could not be
+/// attributed to a repo at all (`unversioned` — no `.git` found between the
+/// file and `workspace_root`, e.g. a plain non-git workspace folder). An
+/// empty, all-`unversioned`-free batch is the same "nothing to do" signal
+/// the old `Option<PullRequestOutcome>` `None` case was.
+#[derive(Default)]
+pub struct PullRequestBatch {
+    pub outcomes: Vec<PullRequestOutcome>,
+    pub unversioned: Vec<PathBuf>,
+}
+
 /// Branch, commit the execution's changed files, push, and open a PR via
-/// `gh`. Returns `Ok(None)` (not an error) when there is nothing to open a
-/// PR for: the execution did not complete successfully, or it made no file
-/// changes (e.g. `review`/`explain`).
+/// `gh` — once per repo the execution actually touched (see
+/// `super::repo::group_by_repo`). Returns an empty batch (not an error) when
+/// there is nothing to open a PR for: the execution did not complete
+/// successfully, or it made no file changes (e.g. `review`/`explain`).
 pub async fn create_from_execution(
     workspace_root: &Path,
     execution: &Execution,
     base_branch: &str,
-) -> Result<Option<PullRequestOutcome>> {
+) -> Result<PullRequestBatch> {
     if execution.status != ExecutionStatus::Completed {
-        return Ok(None);
+        return Ok(PullRequestBatch::default());
     }
     let Some(result) = &execution.result else {
-        return Ok(None);
+        return Ok(PullRequestBatch::default());
     };
     if result.changed_files.is_empty() {
-        return Ok(None);
+        return Ok(PullRequestBatch::default());
     }
 
-    ensure_git_identity(workspace_root).await?;
-
-    let branch = format!("ksforge/{}", short_id(&execution.id.0));
-    run_git(workspace_root, &["checkout", "-b", &branch]).await?;
-
-    let mut add_args: Vec<String> = vec!["add".into(), "--".into()];
-    add_args.extend(result.changed_files.iter().map(|p| p.display().to_string()));
-    run_git(
-        workspace_root,
-        &add_args.iter().map(String::as_str).collect::<Vec<_>>(),
-    )
-    .await?;
-
+    let (groups, unversioned) = group_by_repo(workspace_root, &result.changed_files);
     let title = pull_request_title(&execution.capability, result);
     let body = pr_body(execution);
-    run_git(workspace_root, &["commit", "-m", &title, "-m", &body]).await?;
 
-    run_git(workspace_root, &["push", "-u", "origin", &branch]).await?;
+    let mut outcomes = Vec::new();
+    for (repo, files) in groups {
+        ensure_git_identity(&repo).await?;
 
-    let url = run_gh(
-        workspace_root,
-        &[
-            "pr",
-            "create",
-            "--title",
-            &title,
-            "--body",
-            &body,
-            "--base",
-            base_branch,
-            "--head",
-            &branch,
-        ],
-    )
-    .await?;
+        let branch = format!("ksforge/{}", short_id(&execution.id.0));
+        run_git(&repo, &["checkout", "-b", &branch]).await?;
 
-    Ok(Some(PullRequestOutcome {
-        branch,
-        url: url.trim().lines().last().map(str::to_string),
-    }))
+        let mut add_args: Vec<String> = vec!["add".into(), "--".into()];
+        add_args.extend(files.iter().map(|p| p.display().to_string()));
+        run_git(
+            &repo,
+            &add_args.iter().map(String::as_str).collect::<Vec<_>>(),
+        )
+        .await?;
+
+        run_git(&repo, &["commit", "-m", &title, "-m", &body]).await?;
+        run_git(&repo, &["push", "-u", "origin", &branch]).await?;
+
+        let url = run_gh(
+            &repo,
+            &[
+                "pr",
+                "create",
+                "--title",
+                &title,
+                "--body",
+                &body,
+                "--base",
+                base_branch,
+                "--head",
+                &branch,
+            ],
+        )
+        .await?;
+
+        outcomes.push(PullRequestOutcome {
+            repo,
+            branch,
+            url: url.trim().lines().last().map(str::to_string),
+        });
+    }
+
+    Ok(PullRequestBatch {
+        outcomes,
+        unversioned,
+    })
+}
+
+/// One repo's outcome from [`push_follow_up`] or [`commit_to_new_branch`] —
+/// no URL (neither ever calls `gh`), see [`PullRequestOutcome`] for the
+/// `create_from_execution` shape which does.
+pub struct RepoCommitOutcome {
+    pub repo: PathBuf,
+    /// The commit title (`push_follow_up`) or the new branch name
+    /// (`commit_to_new_branch`) — always non-empty for an actual entry.
+    pub label: String,
+}
+
+/// See [`PullRequestBatch`]; the same "one entry per touched repo, plus
+/// leftover unversioned files" shape for functions that don't produce a PR.
+#[derive(Default)]
+pub struct RepoCommitBatch {
+    pub outcomes: Vec<RepoCommitOutcome>,
+    pub unversioned: Vec<PathBuf>,
 }
 
 /// Commits the execution's changed files directly onto the *currently
@@ -80,38 +126,118 @@ pub async fn create_from_execution(
 /// then a normal `ksforge implement`/`ksforge fix --push-to-branch` call
 /// runs it against a checkout of the PR's own head branch), which must
 /// update that existing PR rather than open a new one the way
-/// `create_from_execution` does. Returns `Ok(None)` for the same
-/// "nothing to do" cases as `create_from_execution`; the caller (`ksforge
-/// post-report --pr <number>`) posts/updates the PR comment separately.
+/// `create_from_execution` does — once per repo the execution touched.
+/// Returns an empty batch for the same "nothing to do" cases as
+/// `create_from_execution`; the caller (`ksforge post-report --pr <number>`)
+/// posts/updates the PR comment separately.
 pub async fn push_follow_up(
     workspace_root: &Path,
     execution: &Execution,
-) -> Result<Option<String>> {
+) -> Result<RepoCommitBatch> {
     if execution.status != ExecutionStatus::Completed {
-        return Ok(None);
+        return Ok(RepoCommitBatch::default());
     }
     let Some(result) = &execution.result else {
-        return Ok(None);
+        return Ok(RepoCommitBatch::default());
     };
     if result.changed_files.is_empty() {
-        return Ok(None);
+        return Ok(RepoCommitBatch::default());
     }
 
-    ensure_git_identity(workspace_root).await?;
-
-    let mut add_args: Vec<String> = vec!["add".into(), "--".into()];
-    add_args.extend(result.changed_files.iter().map(|p| p.display().to_string()));
-    run_git(
-        workspace_root,
-        &add_args.iter().map(String::as_str).collect::<Vec<_>>(),
-    )
-    .await?;
-
+    let (groups, unversioned) = group_by_repo(workspace_root, &result.changed_files);
     let title = pull_request_title(&execution.capability, result);
-    run_git(workspace_root, &["commit", "-m", &title]).await?;
-    run_git(workspace_root, &["push"]).await?;
 
-    Ok(Some(title))
+    let mut outcomes = Vec::new();
+    for (repo, files) in groups {
+        ensure_git_identity(&repo).await?;
+
+        let mut add_args: Vec<String> = vec!["add".into(), "--".into()];
+        add_args.extend(files.iter().map(|p| p.display().to_string()));
+        run_git(
+            &repo,
+            &add_args.iter().map(String::as_str).collect::<Vec<_>>(),
+        )
+        .await?;
+
+        run_git(&repo, &["commit", "-m", &title]).await?;
+        run_git(&repo, &["push"]).await?;
+
+        outcomes.push(RepoCommitOutcome {
+            repo,
+            label: title.clone(),
+        });
+    }
+
+    Ok(RepoCommitBatch {
+        outcomes,
+        unversioned,
+    })
+}
+
+/// Branches and commits the execution's changed files locally — the same
+/// branch/add/commit shape as `create_from_execution`'s first half, but
+/// never pushes or calls `gh` (interactive chat's local merge-back, section
+/// "Local branch, commit — automatic" in docs/12-interactive-chat.md) —
+/// once per repo the execution touched. Returns an empty batch for the same
+/// "nothing to do" cases as `create_from_execution`.
+pub async fn commit_to_new_branch(
+    workspace_root: &Path,
+    execution: &Execution,
+) -> Result<RepoCommitBatch> {
+    if execution.status != ExecutionStatus::Completed {
+        return Ok(RepoCommitBatch::default());
+    }
+    let Some(result) = &execution.result else {
+        return Ok(RepoCommitBatch::default());
+    };
+    if result.changed_files.is_empty() {
+        return Ok(RepoCommitBatch::default());
+    }
+
+    let (groups, unversioned) = group_by_repo(workspace_root, &result.changed_files);
+    let title = pull_request_title(&execution.capability, result);
+    let body = pr_body(execution);
+
+    let mut outcomes = Vec::new();
+    for (repo, files) in groups {
+        ensure_git_identity(&repo).await?;
+
+        let branch = format!("ksforge/{}", short_id(&execution.id.0));
+        run_git(&repo, &["checkout", "-b", &branch]).await?;
+
+        let mut add_args: Vec<String> = vec!["add".into(), "--".into()];
+        add_args.extend(files.iter().map(|p| p.display().to_string()));
+        run_git(
+            &repo,
+            &add_args.iter().map(String::as_str).collect::<Vec<_>>(),
+        )
+        .await?;
+
+        run_git(&repo, &["commit", "-m", &title, "-m", &body]).await?;
+
+        outcomes.push(RepoCommitOutcome {
+            repo,
+            label: branch,
+        });
+    }
+
+    Ok(RepoCommitBatch {
+        outcomes,
+        unversioned,
+    })
+}
+
+/// Merges `branch` into `base_branch` locally and deletes `branch`, inside
+/// `repo` — the confirmed half of chat's merge-back (section "Merge back —
+/// confirmed" in docs/12-interactive-chat.md). Never touches a remote, never
+/// calls `gh`. `repo` is a [`RepoCommitOutcome::repo`] from
+/// `commit_to_new_branch`, not necessarily the workspace root.
+pub async fn merge_branch_into(repo: &Path, branch: &str, base_branch: &str) -> Result<()> {
+    run_git(repo, &["checkout", base_branch]).await?;
+    let message = format!("Merge branch '{branch}' into {base_branch}");
+    run_git(repo, &["merge", "--no-ff", branch, "-m", &message]).await?;
+    run_git(repo, &["branch", "-d", branch]).await?;
+    Ok(())
 }
 
 /// `git commit` needs an identity to attribute the commit to, and a fresh
@@ -304,7 +430,8 @@ mod tests {
         let result = push_follow_up(Path::new("/does/not/exist"), &execution)
             .await
             .unwrap();
-        assert!(result.is_none());
+        assert!(result.outcomes.is_empty());
+        assert!(result.unversioned.is_empty());
     }
 
     #[tokio::test]
@@ -320,6 +447,137 @@ mod tests {
         let result = push_follow_up(Path::new("/does/not/exist"), &execution)
             .await
             .unwrap();
-        assert!(result.is_none());
+        assert!(result.outcomes.is_empty());
+    }
+
+    #[tokio::test]
+    async fn commit_to_new_branch_is_a_noop_before_the_execution_completes() {
+        let execution = Execution::start(
+            ChangeRequest::from_text("As a user, I want X.").unwrap(),
+            "implement",
+        );
+        let result = commit_to_new_branch(Path::new("/does/not/exist"), &execution)
+            .await
+            .unwrap();
+        assert!(result.outcomes.is_empty());
+    }
+
+    #[tokio::test]
+    async fn commit_to_new_branch_is_a_noop_with_no_changed_files() {
+        let mut execution = Execution::start(
+            ChangeRequest::from_text("As a user, I want X.").unwrap(),
+            "review",
+        );
+        let mut result = result_with_title(Some("Nothing to change"));
+        result.changed_files = Vec::new();
+        execution.complete(result);
+
+        let result = commit_to_new_branch(Path::new("/does/not/exist"), &execution)
+            .await
+            .unwrap();
+        assert!(result.outcomes.is_empty());
+    }
+
+    /// A changed file with no `.git` anywhere between it and `workspace_root`
+    /// (a plain non-git workspace folder) is reported as `unversioned`
+    /// rather than failing the whole batch.
+    #[tokio::test]
+    async fn changed_files_outside_any_repo_are_reported_not_erred() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("notes.md"), "hi").unwrap();
+
+        let mut execution = Execution::start(
+            ChangeRequest::from_text("As a user, I want X.").unwrap(),
+            "implement",
+        );
+        let mut result = result_with_title(Some("Add notes"));
+        result.changed_files = vec!["notes.md".into()];
+        execution.complete(result);
+
+        let batch = commit_to_new_branch(dir.path(), &execution).await.unwrap();
+        assert!(batch.outcomes.is_empty());
+        assert_eq!(batch.unversioned, vec![PathBuf::from("notes.md")]);
+    }
+
+    #[tokio::test]
+    async fn commit_to_new_branch_and_merge_branch_into_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        run_git(dir.path(), &["init", "-q", "-b", "main"])
+            .await
+            .unwrap();
+        std::fs::write(dir.path().join("README.md"), "hello\n").unwrap();
+        run_git(dir.path(), &["add", "README.md"]).await.unwrap();
+        ensure_git_identity(dir.path()).await.unwrap();
+        run_git(dir.path(), &["commit", "-q", "-m", "initial"])
+            .await
+            .unwrap();
+
+        std::fs::write(dir.path().join("README.md"), "hello world\n").unwrap();
+        let mut execution = Execution::start(
+            ChangeRequest::from_text("As a user, I want X.").unwrap(),
+            "implement",
+        );
+        let mut result = result_with_title(Some("Update README"));
+        result.changed_files = vec!["README.md".into()];
+        execution.complete(result);
+
+        let batch = commit_to_new_branch(dir.path(), &execution).await.unwrap();
+        let outcome = batch
+            .outcomes
+            .into_iter()
+            .next()
+            .expect("there is a change to commit");
+        assert!(outcome.label.starts_with("ksforge/"));
+
+        merge_branch_into(&outcome.repo, &outcome.label, "main")
+            .await
+            .unwrap();
+
+        let branches = run_git(dir.path(), &["branch", "--list", &outcome.label])
+            .await
+            .unwrap();
+        assert!(
+            branches.trim().is_empty(),
+            "merged branch should be deleted, got: {branches:?}"
+        );
+        // Not `assert_eq!` against a literal "\n" ending: on Windows, a
+        // repo/global `core.autocrlf` can rewrite line endings on checkout,
+        // which is unrelated to what this test actually verifies.
+        let content = std::fs::read_to_string(dir.path().join("README.md")).unwrap();
+        assert!(content.trim_end() == "hello world");
+    }
+
+    /// Two independent sibling repos under a non-git workspace root (the
+    /// chevp multi-repo workspace shape) each get their own branch/commit.
+    #[tokio::test]
+    async fn commit_to_new_branch_handles_sibling_repos_independently() {
+        let root = tempfile::tempdir().unwrap();
+        for repo in ["one", "two"] {
+            let path = root.path().join(repo);
+            std::fs::create_dir_all(&path).unwrap();
+            run_git(&path, &["init", "-q", "-b", "main"]).await.unwrap();
+            std::fs::write(path.join("f.txt"), "before\n").unwrap();
+            run_git(&path, &["add", "f.txt"]).await.unwrap();
+            ensure_git_identity(&path).await.unwrap();
+            run_git(&path, &["commit", "-q", "-m", "initial"])
+                .await
+                .unwrap();
+            std::fs::write(path.join("f.txt"), format!("{repo} changed\n")).unwrap();
+        }
+
+        let mut execution = Execution::start(
+            ChangeRequest::from_text("As a user, I want X.").unwrap(),
+            "implement",
+        );
+        let mut result = result_with_title(Some("Update both repos"));
+        result.changed_files = vec!["one/f.txt".into(), "two/f.txt".into()];
+        execution.complete(result);
+
+        let batch = commit_to_new_branch(root.path(), &execution).await.unwrap();
+        assert_eq!(batch.outcomes.len(), 2);
+        assert!(batch.unversioned.is_empty());
+        let repos: Vec<_> = batch.outcomes.iter().map(|o| o.repo.clone()).collect();
+        assert!(repos.contains(&root.path().join("one")));
+        assert!(repos.contains(&root.path().join("two")));
     }
 }

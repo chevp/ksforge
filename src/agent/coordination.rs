@@ -5,7 +5,7 @@ use super::executor::{AgentError, AgentResult};
 
 /// What the coordination agent (`prompts/coordinator/system-prompt.md`,
 /// `application::coordinate`) reports about a new change request relative
-/// to the workspace's other active executions — its §20 "Coordination
+/// to the workspace's other active executions — its §Bwuxxi7 "Coordination
 /// Output", minus `execution_id` (this run never starts an `Execution` of
 /// its own, so there is none to report). Advisory only: `proceed: false`
 /// is a recommendation ksforge surfaces to the caller, not something this
@@ -26,7 +26,7 @@ pub struct CoordinationDecision {
     pub proceed: bool,
 }
 
-/// §6 of the coordinator prompt.
+/// §NB0Aevz of the coordinator prompt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Classification {

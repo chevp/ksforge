@@ -1,10 +1,10 @@
-# Interactive chat (design, not yet implemented)
+# Interactive chat
 
-**Status: proposed.** Nothing under `src/` implements this yet. This
-document captures the agreed design for a follow-up implementation task,
-so it can be reviewed independently of writing the code — see
-[04-cli-reference.md](04-cli-reference.md), which still describes today's
-CLI ("no `ksforge chat`, no `ksforge agent`") accurately until this ships.
+**Status: implemented.** `ksforge chat` (and bare `ksforge`) is live —
+`src/cli/chat.rs`, plus `github::commit_to_new_branch`/
+`github::merge_branch_into` in `src/github/pull_request.rs` for the local
+merge-back. This document is the reference for how it behaves; see
+[04-cli-reference.md](04-cli-reference.md) for the option table.
 
 ## Motivation
 
@@ -14,12 +14,11 @@ pipeline instead of one `implement`/`review`/`fix`/`explain` invocation
 per shell command — including branching, committing, and merging back to
 `main`, driven from the same chat feed.
 
-This is a deliberate reversal of the "not a chatbot wrapper" stance
-`04-cli-reference.md` states today. It does not change what runs
-underneath: every chat turn is still one ordinary, resumable `Execution`
+Chat is a conversational front end over the same capability pipeline every
+other command uses: every chat turn is one ordinary, resumable `Execution`
 going through the same `application::execute::run` pipeline as
-`ksforge implement` does today. Chat is a new front end, not a new
-execution model.
+`ksforge implement` — same prompts, same validation, same persistence,
+just driven from a REPL instead of one invocation per shell command.
 
 ## Invocation
 
@@ -40,7 +39,7 @@ today (see `CommonArgs` in `04-cli-reference.md`):
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--workspace <path>` | `.` | Workspace root. Must be a git repository (see below) — unlike the other capabilities, which also work in a plain non-git directory. |
+| `--workspace <path>` | `.` | Workspace root. Any directory — a single repo, a plain non-git folder, or a folder holding several independent repos (each changed file is attributed to its own nearest repo at merge-back time, see step 4 below). |
 | `--engine claude\|codex` | `claude` | Same as today. |
 | `--model <name>` | `sonnet` for `claude`, Codex's own default for `codex` | Same as today. |
 | `--max-budget-usd <n>` | none | Same as today. Applies per chat turn, not to the whole session. |
@@ -95,20 +94,28 @@ ksforge> exit
    `application::resume::resume` — no separate `ksforge resume` shell
    command needed inside a chat session. A line that doesn't match any
    offered option id is rejected with an error and the gate stays open.
-4. **Local branch, commit — automatic.** Once a turn's `Execution`
-   reaches `status: completed` with a non-empty `changed_files`, chat
+4. **Local branch, commit — automatic, once per repo touched.** Once a
+   turn's `Execution` reaches `status: completed` with a non-empty
+   `changed_files`, chat groups those files by the git repo that actually
+   owns each one (`github::repo::group_by_repo` — nearest `.git` above
+   each file, never searching above `--workspace`) and, for each repo,
    immediately creates a new local branch (`ksforge/<short execution id>`,
    the same naming `github::create_from_execution` already uses) and
-   commits the changed files onto it — unattended, no confirmation. This
-   step never touches a remote and never calls `gh`.
-5. **Merge back — confirmed.** Before merging that branch into
-   `--base-branch`, chat asks once, in the same feed:
-   `Nach '<base-branch>' mergen? [y/N]`. Only `y`/`yes`/`j`/`ja`
+   commits that repo's changed files onto it — unattended, no
+   confirmation. This step never touches a remote and never calls `gh`. A
+   changed file with no `.git` anywhere above it (a plain non-git
+   `--workspace` folder) is reported, not silently dropped or an error —
+   the turn itself already completed successfully.
+5. **Merge back — confirmed, per repo.** For each repo branched/committed
+   in step 4, chat asks once, in the same feed:
+   `'<branch>' nach '<base-branch>' mergen? [y/N]`. Only `y`/`yes`/`j`/`ja`
    (case-insensitive) proceeds. On confirmation: checkout
-   `--base-branch`, `git merge --no-ff <branch>`, delete `<branch>`. On
-   anything else: nothing further happens — the commit stays on the
-   feature branch, which is left checked out, so no work is lost and the
-   user can inspect or discard it manually before the next chat turn.
+   `--base-branch`, `git merge --no-ff <branch>`, delete `<branch>` — all
+   inside that repo. On anything else: nothing further happens for that
+   repo — the commit stays on the feature branch, which is left checked
+   out, so no work is lost and the user can inspect or discard it manually
+   before the next chat turn. Other touched repos are asked about
+   independently, in the same order they were committed.
 6. **Capabilities with no changes** (`review`, `explain`, or a turn that
    made no edits) skip steps 4-5 entirely — same "nothing to open a PR
    for" semantics `create_from_execution` already has today, just without
@@ -146,20 +153,22 @@ ksforge> exit
   the fixed `review:`/`fix:`/`explain:` prefix convention in step 1, not
   a model call — keeps routing deterministic and free.
 
-## Impact on existing modules (for the implementation task)
+## Impact on existing modules
 
-Per [03-architecture.md](03-architecture.md)'s layering, this adds:
+Per [03-architecture.md](03-architecture.md)'s layering, this added:
 
-- `cli`: a new `chat` submodule (argument struct + the REPL loop),
-  alongside the existing `commands`/`args`/`output`.
-- `github`: a new local-only merge-back function next to
-  `create_from_execution`/`push_follow_up` — branches and commits exactly
-  like `create_from_execution` does, but merges into `--base-branch`
-  locally instead of pushing and calling `gh pr create`. Still the only
-  module that runs `git`, so this does not violate "Git/GitHub are
-  infrastructure, never domain" — it is a third git-based outcome next to
-  the two that already exist, not a new layer.
+- `cli`: a new `chat` submodule (`src/cli/chat.rs`: the REPL loop,
+  `route`, and the local branch/merge confirmation), plus `ChatArgs` in
+  `args.rs` and `Command::Chat`/`cli.command: Option<Command>` so bare
+  `ksforge` resolves to `Chat(ChatArgs::default())`.
+- `github`: `commit_to_new_branch`/`merge_branch_into` next to
+  `create_from_execution`/`push_follow_up` in `pull_request.rs` — branches
+  and commits exactly like `create_from_execution` does, but merges into
+  `--base-branch` locally instead of pushing and calling `gh pr create`.
+  Still the only module that runs `git`, keeping "Git/GitHub are
+  infrastructure, never domain" intact — a third git-based outcome
+  alongside the two that already exist, at the same layer.
 
-No changes to `domain`, `agent`, `application`, `validation`, or the
-`Execution` state machine are implied — chat is a new way to drive the
-existing pipeline, not a new pipeline.
+`domain`, `agent`, `application`, `validation`, and the `Execution` state
+machine stayed exactly as they were — chat drives the existing pipeline
+through a new front end.

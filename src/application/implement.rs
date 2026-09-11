@@ -5,7 +5,7 @@ use crate::domain::{
 };
 
 /// Implement a change request end to end: analyze, plan, modify, validate. The
-/// primary capability (section 8) and the only one with full
+/// primary capability (§6Kh5ESS) and the only one with full
 /// human-in-the-loop depth by default.
 pub struct Implement;
 

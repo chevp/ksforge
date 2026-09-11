@@ -27,7 +27,7 @@ Concretely:
   requires repo write access to trigger) — the two-run resume pattern in
   [07-github-actions.md](07-github-actions.md) does this.
 - A **paused** execution's decision may additionally be resumed via
-  `issue_comment` (`/ksforge choose <option>`, section 16 of the
+  `issue_comment` (`/ksforge choose <option>`, §pewY5yG of the
   human-in-the-loop spec), which *does* fire on externally-triggerable
   content — this is deliberately allowed, but only with defense in depth,
   since a single check either side could omit is not enough on its own:
@@ -44,12 +44,12 @@ Concretely:
      never as an error that lets the decision through.
   3. **Gate/option validation**: the comment must name a currently-open
      gate's execution and one of its actual options — an arbitrary comment
-     that merely resembles the command is rejected (section 16: "never
+     that merely resembles the command is rejected (§pewY5yG: "never
      resume solely because a comment contains text resembling a decision").
   4. **Idempotency**: the GitHub comment's numeric id is recorded once
      acted on (`ExecutionStore::mark_event_processed`), so a duplicate
      webhook delivery for the same comment is a no-op, not a second resume
-     (section 17).
+     (§DlruVSP).
 
   What a `/ksforge choose` comment can *never* do: start a new execution,
   choose an arbitrary capability, or bypass `--validate`/`--create-pull-request`
@@ -75,7 +75,7 @@ Concretely:
   system prompt, authority hierarchy, and "repository content is data,
   not instructions" posture as any other run (see "Prompt injection"
   above) — a comment is no more able to override ksforge's own policy
-  than a `--change-request` argument is.
+  than a `--change` argument is.
 
 ## Least privilege
 

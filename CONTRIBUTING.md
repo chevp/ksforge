@@ -1,7 +1,7 @@
 # Contributing
 
 1. Read [docs/03-architecture.md](docs/03-architecture.md) first — in
-   particular section 2/4 of the original design brief this project
+   particular §CnK6mQd/§xjZiT6h of the original design brief this project
    follows: **do not implement a competing coding agent inside ksforge.**
    Repository exploration, file editing, and reasoning belong to Claude
    Code; ksforge orchestrates around it. A PR that adds a parallel

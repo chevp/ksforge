@@ -5,7 +5,7 @@ use crate::domain::Result;
 use super::process::run_gh;
 
 /// Extract the option id from a `/ksforge choose <option>` comment body, if
-/// present anywhere in it (section 16). Deliberately no `regex` dependency
+/// present anywhere in it (§pewY5yG). Deliberately no `regex` dependency
 /// — the command has exactly one fixed shape, `strip_prefix` covers it.
 pub fn parse_choose_command(body: &str) -> Option<String> {
     for line in body.lines() {
@@ -79,7 +79,7 @@ pub fn parse_follow_up_command(body: &str) -> Option<FollowUpCommand> {
 
 /// Re-check the commenter's own repository permission via the GitHub API,
 /// independent of whatever the invoking workflow's `if:` already checked
-/// (section 23: a comment is never trusted as workflow authority on its
+/// (§D3QZhrY: a comment is never trusted as workflow authority on its
 /// own — defense in depth, see docs/09-security.md). `true` only for
 /// `admin`/`write`; anything else — including a failed/not-found lookup —
 /// is treated as unauthorized, never as an error to propagate.

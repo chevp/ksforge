@@ -9,7 +9,7 @@ explain, see [05-capabilities.md](05-capabilities.md)); it only adds tools.
 ## Using one
 
 ```bash
-ksforge implement --change-request "..." --mcp-config path/to/mcp-config.json
+ksforge implement --change "..." --mcp-config path/to/mcp-config.json
 ```
 
 `--mcp-config <path>` is passed straight through to `claude -p
@@ -25,7 +25,7 @@ user- or project-level Claude Code config (least privilege — see
 Without `--mcp-config`, `claude -p` runs exactly as before: no MCP flags at
 all.
 
-## Why this isn't a ksforge-specific format
+## Reusing Claude Code's own MCP config format
 
 `palau-test` (`tools/palau-test`), the sibling code-generation tool this
 mechanism is modeled on, ships its integrations as compiled npm packages
@@ -33,24 +33,20 @@ mechanism is modeled on, ships its integrations as compiled npm packages
 a small descriptor `{name, description, entry, env}` that its CLI turns
 into an `--mcp-config` file at runtime.
 
-ksforge ships as a single distributed binary with no accompanying package
-directory (see [01-installation.md](01-installation.md) and
-`.github/workflows/release.yml`), so there is nothing for a "capability
-package" to live inside once installed from a release tarball. Rather than
-invent a second, ksforge-specific descriptor format that only duplicates
-Claude Code's own `--mcp-config` schema, ksforge exposes that flag
-directly. This also means adding an integration for a given workspace or
-CI job needs no ksforge rebuild — just a JSON file next to the workflow
-that uses it.
+ksforge ships as a single distributed binary (see
+[01-installation.md](01-installation.md) and
+`.github/workflows/release.yml`), so it exposes Claude Code's own
+`--mcp-config` flag directly instead of layering a second,
+ksforge-specific descriptor format on top of it. Adding an integration for
+a given workspace or CI job then needs only a JSON file next to the
+workflow that uses it — no ksforge rebuild.
 
-This is a deliberate difference from `palau-test`'s `--capability <name>`
-flag, not a smaller version of it: there is no ksforge-side registry of
-named integrations, and no built-in example ships with this version (this
-was a scoping decision for this version, not a limitation of the
-mechanism — nothing here forecloses adding one later, e.g. `ksforge
-integrations add <name>` writing/merging into a shared config file, if a
-real project ends up wanting a named, versioned set of these rather than
-ad-hoc paths per invocation).
+This version keeps the surface intentionally small: ad-hoc `--mcp-config`
+paths per invocation, a scoping choice rather than the ceiling of the
+mechanism. A later version could add a ksforge-side registry of named
+integrations the way `palau-test`'s `--capability <name>` flag works — e.g.
+`ksforge integrations add <name>` writing/merging into a shared config
+file — if a real project ends up wanting a named, versioned set of these.
 
 ## In GitHub Actions
 

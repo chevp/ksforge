@@ -7,7 +7,7 @@ Assumes ksforge and `claude` are both installed and on your `PATH` — see
 export ANTHROPIC_API_KEY=...   # or however Claude Code auth is configured
 
 cd your-project
-ksforge implement --change-request "As a user, I want to reset my password via email."
+ksforge implement --change "As a user, I want to reset my password via email."
 ```
 
 What happens:
@@ -28,7 +28,7 @@ What happens:
 ## Try it safely first
 
 ```bash
-ksforge implement --change-request "..." --dry-run
+ksforge implement --change "..." --dry-run
 ```
 
 Runs against an isolated temporary copy of your workspace — nothing is
@@ -39,7 +39,7 @@ written back to the real one.
 ```bash
 ksforge review .                       # findings only, never writes
 ksforge explain src/auth.rs            # explanation only, never writes
-ksforge fix --change-request "Login times out after 30s under load"
+ksforge fix --change "Login times out after 30s under load"
 ksforge capabilities                   # list what's available
 ```
 

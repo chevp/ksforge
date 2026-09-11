@@ -1,23 +1,10 @@
-name: Change Request to ksforge
-
-# Dogfooding: ksforge accepts change requests against its own repository
-# the same way examples/workflows/change-request-to-ksforge.yml lets any
-# consumer repo do it. Uses @main (not a pinned tag) so this always runs
-# against ksforge's own current action.yml/CLI, not a stale released
-# version — the opened PR still goes through ci.yml (pull_request trigger)
-# before anyone merges it.
-#
-# Always implement: a "change request" is a request to change something,
-# not to review or explain it — those are different capabilities with
-# different (read-only) semantics, not a choice that belongs on this input.
+name: ksforge
 
 on:
   workflow_dispatch:
     inputs:
-      change_request:
-        description: 'Change Request als Markdown/Text'
+      change:
         required: true
-        type: string
 
 permissions:
   contents: write
@@ -28,19 +15,13 @@ env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
-  forge:
+  run:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Process change request with ksforge
-        uses: chevp/ksforge@main
+      - uses: chevp/ksforge@main
         with:
-          change-request: ${{ inputs.change_request }}
-          capability: implement
-          format: json
-          create-pull-request: "true"
-          base-branch: main
+          change-request: ${{ inputs.change }}

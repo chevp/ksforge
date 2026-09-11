@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ksimg.example/schemas/txt2img.output.json",
+  "title": "txt2img output",
+  "type": "object",
+  "properties": {
+    "image_id": { "type": "string" },
+    "data_type": { "const": "Image" }
+  },
+  "required": ["image_id", "data_type"]
+}

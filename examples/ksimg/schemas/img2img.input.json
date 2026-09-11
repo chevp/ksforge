@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ksimg.example/schemas/img2img.input.json",
+  "title": "img2img input",
+  "type": "object",
+  "properties": {
+    "image_id": { "type": "string" },
+    "data_type": { "const": "Image" }
+  },
+  "required": ["image_id", "data_type"]
+}

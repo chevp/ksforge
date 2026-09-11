@@ -18,7 +18,7 @@ const IGNORED_DIRS: &[&str] = &[
 /// directory that Claude Code is pointed at instead. Dropping this value
 /// deletes the copy. Never claim `--dry-run` is safe without this — the
 /// real workspace must be structurally unreachable, not just "we asked
-/// nicely" (section 25 of the base spec).
+/// nicely" (§38W1mjg of the base spec).
 pub struct IsolatedWorkspace {
     dir: TempDir,
 }
@@ -84,5 +84,63 @@ pub fn resolve_root(path: &Path) -> Result<PathBuf> {
             canonical.display()
         )));
     }
-    Ok(canonical)
+    Ok(strip_windows_verbatim_prefix(canonical))
+}
+
+/// `std::fs::canonicalize` on Windows returns the `\\?\`-prefixed
+/// extended-length ("verbatim") form (`\\?\C:\...`, or `\\?\UNC\server\share`
+/// for a UNC path) — confirmed against a real run: Claude Code's own
+/// sandbox flags this syntax as a "suspicious Windows path pattern"
+/// requiring manual approval, which a non-interactive `--permission-mode`
+/// run has no one to grant, permanently denying every subsequent write for
+/// the rest of that session. Every path ksforge hands to an agent as its
+/// working directory — and states in the prompt as "Workspace: ..." (see
+/// `application::prompt`) — goes through here first, so this is the one
+/// place to strip it rather than re-deriving the fix at every call site.
+/// A no-op everywhere else, and for any Windows path that (rarely) doesn't
+/// carry the prefix to begin with.
+#[cfg(windows)]
+pub fn strip_windows_verbatim_prefix(path: PathBuf) -> PathBuf {
+    let raw = path.as_os_str().to_string_lossy();
+    if let Some(rest) = raw.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{rest}"))
+    } else if let Some(rest) = raw.strip_prefix(r"\\?\") {
+        PathBuf::from(rest.to_string())
+    } else {
+        path
+    }
+}
+
+#[cfg(not(windows))]
+pub fn strip_windows_verbatim_prefix(path: PathBuf) -> PathBuf {
+    path
+}
+
+#[cfg(all(test, windows))]
+mod windows_verbatim_prefix_tests {
+    use super::*;
+
+    #[test]
+    fn strips_a_plain_disk_prefix() {
+        assert_eq!(
+            strip_windows_verbatim_prefix(PathBuf::from(r"\\?\C:\chevp\apps\ksforge")),
+            PathBuf::from(r"C:\chevp\apps\ksforge")
+        );
+    }
+
+    #[test]
+    fn strips_a_unc_prefix() {
+        assert_eq!(
+            strip_windows_verbatim_prefix(PathBuf::from(r"\\?\UNC\server\share\dir")),
+            PathBuf::from(r"\\server\share\dir")
+        );
+    }
+
+    #[test]
+    fn leaves_an_already_plain_path_untouched() {
+        assert_eq!(
+            strip_windows_verbatim_prefix(PathBuf::from(r"C:\chevp\apps\ksforge")),
+            PathBuf::from(r"C:\chevp\apps\ksforge")
+        );
+    }
 }

@@ -6,7 +6,7 @@ ksforge trusts that result. The first failing command stops the run and
 marks the `Execution` `Failed`.
 
 ```bash
-ksforge implement --change-request "..." \
+ksforge implement --change "..." \
   --validate "cargo check" \
   --validate "cargo test"
 ```

@@ -166,7 +166,7 @@ runs:
         if [ -n "$KSFORGE_EXECUTION_ID" ]; then
           out=$(ksforge resume "$KSFORGE_EXECUTION_ID" --decision "$KSFORGE_DECISION" "${args[@]}")
         else
-          out=$(ksforge "$KSFORGE_CAPABILITY" --change-request "$KSFORGE_CHANGE_REQUEST" "${args[@]}")
+          out=$(ksforge "$KSFORGE_CAPABILITY" --change "$KSFORGE_CHANGE_REQUEST" "${args[@]}")
         fi
         code=$?
         set -e

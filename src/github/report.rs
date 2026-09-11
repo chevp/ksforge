@@ -1,7 +1,7 @@
 use crate::domain::{Execution, ExecutionEvent, ExecutionStatus, HumanDecisionRequest};
 
 /// Render an [`Execution`] as the markdown body for its ksforge status/
-/// decision PR comment (section 13-15/19). Pure and side-effect free so it
+/// decision PR comment (§egkEINs/§qHiXmf0/§sTdJsQn/§TkQFZyO). Pure and side-effect free so it
 /// can be unit-tested without `gh`/network — posting is `github::comment`'s
 /// job.
 pub fn render(execution: &Execution) -> String {
@@ -17,7 +17,7 @@ pub fn render(execution: &Execution) -> String {
 }
 
 /// The HTML-comment marker ksforge uses to find its own comment on a PR
-/// (section 13) so it can update it instead of appending a new one every
+/// (§egkEINs) so it can update it instead of appending a new one every
 /// time — never the only visible content of the comment.
 pub fn marker_for(execution_id: &str) -> String {
     format!("<!-- ksforge:execution={execution_id}:report -->")
@@ -86,6 +86,24 @@ fn render_completed(execution: &Execution) -> String {
                 c.command,
                 if c.passed { "passed" } else { "failed" }
             ));
+        }
+        s.push('\n');
+    }
+
+    if let Some(review) = result.and_then(|r| r.validation.agent_review.as_ref()) {
+        s.push_str("### Validation (agent)\n\n");
+        s.push_str(&format!("{}\n\n", review.summary));
+        for c in &review.completed {
+            s.push_str(&format!("- {c}\n"));
+        }
+        if !review.open_items.is_empty() {
+            s.push_str("\nFurther findings:\n\n");
+            for item in &review.open_items {
+                s.push_str(&format!("- {item}\n"));
+            }
+        }
+        if let Some(rec) = &review.recommendation {
+            s.push_str(&format!("\nRecommendation: {rec}\n"));
         }
         s.push('\n');
     }

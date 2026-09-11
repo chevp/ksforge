@@ -12,7 +12,7 @@ use super::request::ImplementationRequest;
 
 /// What a capability is allowed to touch. Enforced by which tools ksforge
 /// hands Claude Code (`--tools` / `--allowedTools`), not re-implemented by
-/// ksforge itself (section 27: Claude Code owns repository exploration).
+/// ksforge itself (§3kuclkU: Claude Code owns repository exploration).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolPolicy {
     /// Read/Grep/Glob only — never Edit, Write, or Bash.
@@ -21,9 +21,25 @@ pub enum ToolPolicy {
     ReadWrite,
 }
 
+/// A restriction on which files a capability's ACT phase may have touched,
+/// checked deterministically against the filesystem diff after ACT
+/// (`domain::test_scope`) — the host enforces this, not the prompt (see
+/// docs/03-architecture.md, "The phase loop"). `None` (the default) means
+/// no restriction beyond `tool_policy()` itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChangeScope {
+    /// Every changed path must be a recognized test file/directory for its
+    /// language, or a non-test file that contains a recognized inline-test
+    /// marker after the change (e.g. Rust's colocated `#[cfg(test)]`) — see
+    /// `domain::test_scope`. A heuristic, not a full diff: it cannot prove
+    /// a mixed file's change was *only* to its test portion, only that the
+    /// file plausibly contains tests at all.
+    TestsOnly,
+}
+
 /// Everything a capability needs to actually run: where the change request runs, and
 /// the port to the execution engine. Composes agent + workspace/config —
-/// deliberately outside pure domain purity for a CLI this size (section 6).
+/// deliberately outside pure domain purity for a CLI this size (§UKoR4HU).
 #[derive(Clone)]
 pub struct ExecutionContext {
     pub executor: Arc<dyn AgentExecutor>,
@@ -37,7 +53,7 @@ pub struct ExecutionContext {
     pub mcp_config: Option<PathBuf>,
 }
 
-/// A kind of operation ksforge can orchestrate (section 8/9). Capabilities
+/// A kind of operation ksforge can orchestrate (§6Kh5ESS/§mgbJZP0). Capabilities
 /// share one execution pipeline (`crate::application::execute::run`); each
 /// impl only supplies policy: id, description, tool scope, default
 /// constraints, and its prompt fragment.
@@ -52,8 +68,13 @@ pub trait Capability: Send + Sync {
     fn supports_human_interaction(&self) -> bool {
         false
     }
+    /// See `ChangeScope`. `None` by default — most capabilities have no
+    /// restriction beyond `tool_policy()`.
+    fn change_scope(&self) -> Option<ChangeScope> {
+        None
+    }
     /// Capability-specific instructions appended to the shared prompt
-    /// skeleton built in `application::prompt` (section 19: prompt
+    /// skeleton built in `application::prompt` (§TkQFZyO: prompt
     /// construction stays centralized, capabilities only add their slice).
     fn prompt_fragment(&self) -> &'static str;
 
@@ -80,6 +101,9 @@ impl CapabilityRegistry {
             Arc::new(crate::application::review::Review),
             Arc::new(crate::application::fix::Fix),
             Arc::new(crate::application::explain::Explain),
+            Arc::new(crate::application::txt2img::Txt2Img),
+            Arc::new(crate::application::img2img::Img2Img),
+            Arc::new(crate::application::test::Test),
         ];
         Self { capabilities }
     }

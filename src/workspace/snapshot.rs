@@ -19,7 +19,7 @@ const IGNORED_DIRS: &[&str] = &[
 
 /// Content hash of every file under `root`, keyed by path relative to
 /// `root`. Used to compute which files an agent turn actually touched
-/// without depending on Git (section 20/27) and without holding every
+/// without depending on Git (§HFNMflB/§3kuclkU) and without holding every
 /// file's bytes in memory at once.
 pub fn hash_tree(root: &Path) -> Result<BTreeMap<PathBuf, String>> {
     let mut snapshot = BTreeMap::new();

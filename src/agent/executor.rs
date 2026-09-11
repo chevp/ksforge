@@ -14,10 +14,19 @@ pub enum PermissionMode {
     /// Edits auto-accepted; unattended prompts are auto-denied (never
     /// hangs waiting for a human that CI cannot provide).
     AcceptEdits,
+    /// Shell execution pre-approved, same as `AcceptEdits`, but Edit/Write
+    /// are not offered as tools at all (see `AgentRequest.tools`) — for the
+    /// VALIDATE turn: run whatever build/test/packaging the change needs to
+    /// be checked, without being able to change code any further. Enforced
+    /// twice over: `application::execute` also diffs the workspace after
+    /// this turn and fails the run if anything changed regardless of what
+    /// the executor actually permitted (never fully trust the executor
+    /// alone for this).
+    ExecuteOnly,
 }
 
 /// A controlled request to the execution engine. Deliberately small and
-/// free of ksforge domain types (section 11): this is the boundary Claude
+/// free of ksforge domain types (§nU95phP): this is the boundary Claude
 /// Code sees, not the boundary the rest of ksforge reasons in.
 #[derive(Debug, Clone)]
 pub struct AgentRequest {
@@ -81,7 +90,7 @@ pub enum AgentError {
 
 /// Port to the coding/agent execution engine. `ksforge` never implements a
 /// competing agent loop behind this trait — every production impl spawns a
-/// real external coding-agent CLI (section 2/3): `ClaudeCodeExecutor`
+/// real external coding-agent CLI (§CnK6mQd/§nLFQ2PQ): `ClaudeCodeExecutor`
 /// (`claude`) or `CodexExecutor` (`codex`, the OpenAI Codex CLI).
 #[async_trait]
 pub trait AgentExecutor: Send + Sync {

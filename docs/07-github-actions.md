@@ -12,6 +12,14 @@ consumer workflow needing to remember this. A step that already sets one
 (as some example workflows below still show, from before this existed)
 is harmless — ksforge's fallback only applies when none exists yet.
 
+A `checkout` with submodules (`with: { submodules: true }` or `recursive`)
+works correctly: ksforge attributes each changed file to the repo that
+actually owns it (`github::repo::group_by_repo`) and commits/pushes a
+submodule's own changes before the superproject's, so the superproject's
+commit picks up the updated gitlink automatically. This applies uniformly,
+not only in Actions — the same code path handles a plain multi-repo CLI
+workspace, see [12-interactive-chat.md](12-interactive-chat.md).
+
 ## Prerequisite: let Actions open pull requests
 
 `create-pull-request: "true"` needs more than `permissions:
@@ -303,7 +311,7 @@ jobs:
 an unauthorized commenter, a gate that's already resolved, or an unknown
 option — the workflow simply doesn't reach `resume` in any of those cases,
 matching "never resume solely because a comment resembles a decision"
-(security section, spec §16).
+(security section, spec §pewY5yG).
 
 ## Comment-driven follow-up: free-text PR comments
 
@@ -389,7 +397,7 @@ jobs:
           CHANGE_REQUEST: ${{ steps.handle.outputs.change_request }}
         run: |
           set -euo pipefail
-          out=$(ksforge "$CAPABILITY" --change-request "$CHANGE_REQUEST" --push-to-branch --format json)
+          out=$(ksforge "$CAPABILITY" --change "$CHANGE_REQUEST" --push-to-branch --format json)
           echo "$out"
           echo "execution-id=$(echo "$out" | jq -r '.execution_id')" >> "$GITHUB_OUTPUT"
 

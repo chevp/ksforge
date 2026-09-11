@@ -5,11 +5,10 @@
 ```bash
 export ANTHROPIC_API_KEY=...
 
-ksforge implement --change-request "As a user, I want to reset my password via email."
+ksforge implement --change "As a user, I want to reset my password via email."
 ```
 
-ksforge is not a Claude Code clone and not a generic LLM client. It's a
-small orchestration layer, written in Rust, that:
+ksforge is a small orchestration layer, written in Rust, that:
 
 1. takes a change request,
 2. builds a controlled request (capability + constraints + validation
@@ -25,14 +24,14 @@ ksforge      = orchestration: change request, capability, policy, workflow, PR.
 Claude Code  = execution engine: repository exploration, editing, reasoning.
 GitHub Actions = automation runtime ksforge targets.
 av           = a separate Kosmos artifact-transformation/variation layer,
-               not a dependency of this first version.
+               independent of this first version.
 ```
 
 ## Quickstart
 
 ```bash
-ksforge implement --change-request "As a user, I want to reset my password via email." --dry-run
-ksforge implement --change-request "As a user, I want to reset my password via email."
+ksforge implement --change "As a user, I want to reset my password via email." --dry-run
+ksforge implement --change "As a user, I want to reset my password via email."
 ksforge review .
 ksforge explain src/auth.rs
 ksforge status <execution-id>
@@ -73,7 +72,8 @@ resumable two-run pattern for when Claude Code needs a decision mid-run.
 | [09 — Security](docs/09-security.md) | Prompt injection posture, least privilege, secret handling |
 | [10 — Configuration](docs/10-configuration.md) | Environment variables and why there's no config file (yet) |
 | [11 — Integrations](docs/11-integrations.md) | Optional MCP servers via `--mcp-config`, and how that differs from a capability |
-| [12 — Interactive chat](docs/12-interactive-chat.md) | Design for a bare-`ksforge` chat mode (branch/commit/merge locally, confirmed) — proposed, not yet implemented |
+| [12 — Interactive chat](docs/12-interactive-chat.md) | `ksforge chat` / bare `ksforge` — conversational front end, local branch/commit/merge (confirmed) |
+| [13 — The model is outside the orchestration](docs/13-model-outside-orchestration.md) | Why the phase loop, tool grants, and "is it done" all live in Rust, not the prompt |
 
 Also: [INSTALL.md](INSTALL.md) (install/global setup), [START.md](START.md) (first run), [BUILD.md](BUILD.md) (build/test/lint loop), [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md).
 

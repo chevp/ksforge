@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Model Is Outside the Orchestration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/js/all.min.js"></script>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #eceef1;
+    --bg-band: #e2e5ea;
+    --surface: #ffffff;
+    --surface-2: #dfe2e7;
+    --border: #c7cdd6;
+    --border-strong: #a9b1bd;
+    --text: #171a1f;
+    --text-dim: #4b525c;
+    --text-faint: #767e8a;
+    --accent: #c25518;
+    --accent-ink: #ffffff;
+    --pass: #1f7a54;
+    --pass-bg: #dcefe4;
+    --deny: #a83a28;
+    --deny-bg: #f6ded9;
+    --host: #2f5c8a;
+    --host-bg: #dfe8f2;
+    --shadow: 0 1px 2px rgba(20, 24, 30, 0.06), 0 8px 24px rgba(20, 24, 30, 0.06);
+    --radius: 10px;
+    --font-display: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171c;
+      --bg-band: #191d23;
+      --surface: #1b1f26;
+      --surface-2: #232832;
+      --border: #333a46;
+      --border-strong: #454e5d;
+      --text: #edf0f4;
+      --text-dim: #a7afbc;
+      --text-faint: #7b8492;
+      --accent: #ff8a42;
+      --accent-ink: #14171c;
+      --pass: #4fcb95;
+      --pass-bg: #1c332a;
+      --deny: #f0725c;
+      --deny-bg: #392420;
+      --host: #7fb2e8;
+      --host-bg: #202b38;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.35);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #14171c;
+    --bg-band: #191d23;
+    --surface: #1b1f26;
+    --surface-2: #232832;
+    --border: #333a46;
+    --border-strong: #454e5d;
+    --text: #edf0f4;
+    --text-dim: #a7afbc;
+    --text-faint: #7b8492;
+    --accent: #ff8a42;
+    --accent-ink: #14171c;
+    --pass: #4fcb95;
+    --pass-bg: #1c332a;
+    --deny: #f0725c;
+    --deny-bg: #392420;
+    --host: #7fb2e8;
+    --host-bg: #202b38;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.35);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 16px;
+    line-height: 1.55;
+    padding-inline: max(20px, calc((100vw - 900px) / 2));
+  }
+
+  a { color: var(--accent); }
+  a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  h1, h2, h3 { text-wrap: balance; font-family: var(--font-display); margin: 0; }
+  p { margin: 0; }
+
+  .mono { font-family: var(--font-mono); }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+
+  /* ---------- shell ---------- */
+  header.top {
+    max-width: 900px;
+    margin: 0 auto;
+    padding-block: 22px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .brand .dot { color: var(--accent); }
+  nav.top-links {
+    display: flex;
+    gap: 18px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+  nav.top-links a { color: var(--text-dim); text-decoration: none; }
+  nav.top-links a:hover { color: var(--accent); }
+
+  main { max-width: 900px; margin: 0 auto; }
+
+  section { padding-block: 56px; }
+  section.band {
+    background: var(--bg-band);
+    margin-inline: calc(-1 * max(20px, calc((100vw - 900px) / 2)));
+    padding-inline: max(20px, calc((100vw - 900px) / 2));
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-head {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 28px;
+    max-width: 640px;
+  }
+  .section-head h2 { font-size: clamp(22px, 3vw, 28px); font-weight: 700; }
+  .section-head p { color: var(--text-dim); font-size: 15.5px; max-width: 62ch; }
+
+  /* ---------- hero ---------- */
+  .hero { padding-block: 44px 8px; }
+  .hero h1 {
+    font-size: clamp(30px, 5vw, 46px);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    max-width: 16ch;
+  }
+  .hero .lede {
+    margin-top: 16px;
+    font-size: 18px;
+    color: var(--text-dim);
+    max-width: 58ch;
+  }
+  .hero .lede strong { color: var(--text); font-weight: 600; }
+
+  .badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+  .badge {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 5px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    color: var(--text-dim);
+  }
+  .badge.accent { border-color: var(--accent); color: var(--accent); }
+
+  .cmd-chip {
+    margin-top: 22px;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text-dim);
+    box-shadow: var(--shadow);
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .cmd-chip .prompt { color: var(--accent); flex-shrink: 0; }
+  .cmd-chip code { white-space: pre; color: var(--text); }
+
+  /* ---------- gate rail ---------- */
+  .rail-wrap {
+    margin-top: 40px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 22px 18px 0;
+  }
+  .rail-scroll { overflow-x: auto; padding-bottom: 18px; }
+  .rail {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    min-width: 640px;
+  }
+  .gate {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 14px;
+    text-align: left;
+    background: none;
+    border: none;
+    border-top: 3px solid var(--border-strong);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    position: relative;
+    padding-top: 16px;
+  }
+  .gate:first-child { padding-left: 4px; }
+  .gate:last-child { padding-right: 4px; }
+  .gate::before {
+    content: "";
+    position: absolute;
+    top: -3px; left: 0; right: 0;
+    height: 3px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.35s ease;
+  }
+  .gate[aria-expanded="true"]::before,
+  .gate.lit::before { transform: scaleX(1); }
+  .gate .step-no { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+  .gate .name { font-family: var(--font-mono); font-weight: 600; font-size: 14.5px; letter-spacing: 0.02em; }
+  .gate .who {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--text-faint);
+  }
+  .gate .who.llm { color: var(--host); }
+  .gate .grant {
+    margin-top: 2px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .gate svg { flex-shrink: 0; width: 1em; height: 1em; }
+  .gate .grant.write { color: var(--deny); }
+  .gate .grant.host { color: var(--host); }
+
+  .rail-detail {
+    border-top: 1px solid var(--border);
+    padding: 18px 4px 20px;
+    font-size: 14.5px;
+    color: var(--text-dim);
+    display: none;
+  }
+  .rail-detail.open { display: block; }
+  .rail-detail .head {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+    font-size: 13.5px;
+  }
+  .rail-hint {
+    font-size: 12px;
+    color: var(--text-faint);
+    text-align: center;
+    padding-bottom: 14px;
+  }
+
+  /* ---------- pull quote ---------- */
+  blockquote.cite {
+    margin: 26px 0 0;
+    padding: 18px 20px;
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+    border-radius: 0 8px 8px 0;
+    font-size: 15.5px;
+    color: var(--text);
+  }
+  blockquote.cite p { margin-bottom: 8px; }
+  blockquote.cite cite {
+    font-family: var(--font-mono);
+    font-style: normal;
+    font-size: 12.5px;
+    color: var(--text-faint);
+  }
+
+  /* ---------- before/after ---------- */
+  .turns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-top: 28px;
+  }
+  @media (max-width: 620px) { .turns { grid-template-columns: 1fr; } }
+  .turn-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 18px;
+  }
+  .turn-card .tag {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .turn-card.before .tag { color: var(--deny); }
+  .turn-card.after .tag { color: var(--pass); }
+  .turn-bar {
+    margin-top: 14px;
+    height: 34px;
+    border-radius: 6px;
+    display: flex;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .turn-bar span { display: block; height: 100%; }
+  .turn-card.before .turn-bar span {
+    flex: 1;
+    background: repeating-linear-gradient(135deg, var(--deny-bg), var(--deny-bg) 8px, var(--surface-2) 8px, var(--surface-2) 16px);
+  }
+  .turn-card.after .turn-bar span:nth-child(odd) { flex: 1; background: var(--host-bg); }
+  .turn-card.after .turn-bar span:nth-child(even) { flex: 0 0 2px; background: var(--border-strong); }
+  .turn-card p.desc { margin-top: 12px; font-size: 13.5px; color: var(--text-dim); }
+
+  /* ---------- three questions ---------- */
+  .q-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 30px;
+  }
+  @media (max-width: 760px) { .q-grid { grid-template-columns: 1fr; } }
+  .q-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: var(--shadow);
+  }
+  .q-card .icon {
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    background: var(--surface-2);
+    color: var(--accent);
+    font-size: 15px;
+  }
+  .q-card h3 { font-size: 16px; font-weight: 600; }
+  .q-card .verdict {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--host);
+    letter-spacing: 0.03em;
+  }
+  .q-card p { font-size: 13.8px; color: var(--text-dim); }
+  .q-card p strong { color: var(--text); font-weight: 600; }
+
+  /* ---------- trace ---------- */
+  .terminal {
+    margin-top: 26px;
+    background: #14171c;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .terminal .bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 9px 12px;
+    background: #1b1f26;
+    border-bottom: 1px solid #2b313c;
+  }
+  .terminal .dots { display: flex; gap: 6px; }
+  .terminal .dots span { width: 9px; height: 9px; border-radius: 50%; background: #3a4150; }
+  .terminal .title { font-family: var(--font-mono); font-size: 12px; color: #8891a0; }
+  .terminal .replay {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: #cdd3dc;
+    background: #232832;
+    border: 1px solid #3a4150;
+    border-radius: 6px;
+    padding: 4px 9px;
+    cursor: pointer;
+  }
+  .terminal .replay:hover { border-color: var(--accent); color: var(--accent); }
+  .terminal pre {
+    margin: 0;
+    padding: 18px 16px 20px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.7;
+    color: #d3d8e0;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .terminal .arrow { color: #7fb2e8; }
+  .terminal .ok { color: #4fcb95; }
+  .terminal .dim { color: #6b7280; }
+  .terminal .flag { color: #f0a35c; }
+  .trace-note {
+    margin-top: 12px;
+    font-size: 12.5px;
+    color: var(--text-faint);
+  }
+
+  /* ---------- compare ---------- */
+  .switch {
+    display: inline-flex;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    padding: 3px;
+    margin-bottom: 22px;
+    background: var(--surface);
+  }
+  .switch button {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    border: none;
+    background: none;
+    color: var(--text-dim);
+    padding: 7px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .switch button[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 680px) { .compare { grid-template-columns: 1fr; } }
+  .compare .panel {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    background: var(--surface);
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  }
+  .compare .panel.focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .compare .panel .who {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-faint);
+  }
+  .compare .panel h3 { margin-top: 6px; font-size: 17px; }
+  .compare .panel ul { margin: 14px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 9px; }
+  .compare .panel li {
+    font-size: 13.6px;
+    color: var(--text-dim);
+    padding-left: 18px;
+    position: relative;
+  }
+  .compare .panel li::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 7px;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--border-strong);
+  }
+  .compare .panel.focus li::before { background: var(--accent); }
+
+  /* ---------- closing ---------- */
+  .closing p { font-size: 16px; color: var(--text-dim); max-width: 66ch; }
+  .closing p + p { margin-top: 14px; }
+  .closing strong { color: var(--text); font-weight: 600; }
+
+  footer {
+    padding-block: 40px 60px;
+    border-top: 1px solid var(--border);
+  }
+  footer .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 22px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+  footer .links a { color: var(--text-dim); text-decoration: none; }
+  footer .links a:hover { color: var(--accent); }
+  footer .colophon {
+    margin-top: 18px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-faint);
+  }
+  footer .legal {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-faint);
+  }
+  footer .legal a { color: var(--text-faint); text-decoration: none; }
+  footer .legal a:hover { color: var(--accent); }
+  footer .legal .sep { color: var(--border-strong); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><span>ksforge</span><span class="dot">/</span><span class="mono" style="color:var(--text-dim); font-weight:400;">docs</span></div>
+  <nav class="top-links">
+    <a href="https://github.com/chevp/ksforge/blob/main/docs/03-architecture.md" target="_blank" rel="noopener">architecture</a>
+    <a href="https://github.com/chevp/ksforge/blob/main/docs/08-validation.md" target="_blank" rel="noopener">validation</a>
+    <a href="https://github.com/chevp/ksforge/blob/main/docs/09-security.md" target="_blank" rel="noopener">security</a>
+    <a href="https://github.com/chevp/ksforge" target="_blank" rel="noopener"><i class="fa-brands fa-github" aria-hidden="true"></i> GitHub</a>
+  </nav>
+</header>
+
+<main>
+
+  <section class="hero">
+    <p class="eyebrow">docs · 13</p>
+    <h1>The model is outside the orchestration.</h1>
+    <p class="lede">
+      The phases are fixed. The tools per phase are fixed. <strong>The model
+      fills in the reasoning inside a boundary held in Rust.</strong>
+    </p>
+
+    <div class="badge-row">
+      <span class="badge accent">host-enforced</span>
+      <span class="badge">Rust state machine</span>
+      <span class="badge">MIT</span>
+      <a class="badge" href="https://github.com/chevp/ksforge" target="_blank" rel="noopener" style="text-decoration:none;"><i class="fa-brands fa-github" aria-hidden="true"></i> github.com/chevp/ksforge</a>
+    </div>
+
+    <div class="cmd-chip">
+      <span class="prompt">$</span>
+      <code>ksforge implement --change "As a user, I want to reset my password via email."</code>
+    </div>
+
+    <div class="rail-wrap">
+      <div class="rail-scroll">
+        <div class="rail" role="group" aria-label="ksforge phase loop">
+          <button class="gate" data-phase="understand" aria-expanded="false">
+            <span class="step-no">1 / 5</span>
+            <span class="name">UNDERSTAND</span>
+            <span class="who llm">
+              <i class="fa-solid fa-robot" aria-hidden="true"></i>
+              model
+            </span>
+            <span class="grant read">
+              <i class="fa-solid fa-lock" aria-hidden="true"></i>
+              read-only
+            </span>
+          </button>
+          <button class="gate" data-phase="locate" aria-expanded="false">
+            <span class="step-no">2 / 5</span>
+            <span class="name">LOCATE</span>
+            <span class="who llm">
+              <i class="fa-solid fa-robot" aria-hidden="true"></i>
+              model
+            </span>
+            <span class="grant read">
+              <i class="fa-solid fa-lock" aria-hidden="true"></i>
+              read-only
+            </span>
+          </button>
+          <button class="gate" data-phase="act" aria-expanded="false">
+            <span class="step-no">3 / 5</span>
+            <span class="name">ACT</span>
+            <span class="who llm">
+              <i class="fa-solid fa-robot" aria-hidden="true"></i>
+              model
+            </span>
+            <span class="grant write">
+              <i class="fa-solid fa-lock-open" aria-hidden="true"></i>
+              capability policy
+            </span>
+          </button>
+          <button class="gate" data-phase="validate" aria-expanded="false">
+            <span class="step-no">4 / 5</span>
+            <span class="name">VALIDATE</span>
+            <span class="who">
+              <i class="fa-solid fa-gear" aria-hidden="true"></i>
+              host
+            </span>
+            <span class="grant host">
+              <i class="fa-solid fa-check" aria-hidden="true"></i>
+              your --validate
+            </span>
+          </button>
+          <button class="gate" data-phase="report" aria-expanded="false">
+            <span class="step-no">5 / 5</span>
+            <span class="name">REPORT</span>
+            <span class="who">
+              <i class="fa-solid fa-gear" aria-hidden="true"></i>
+              host
+            </span>
+            <span class="grant host">
+              <i class="fa-solid fa-file-lines" aria-hidden="true"></i>
+              host-assembled
+            </span>
+          </button>
+        </div>
+      </div>
+      <div class="rail-detail" id="rail-detail"></div>
+      <p class="rail-hint">tap a phase to see its tool grant</p>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="section-head">
+      <p class="eyebrow">the problem</p>
+      <h2>One continuous turn blurs the edge between reading and writing.</h2>
+      <p>ksforge used to run implement/fix as a single Claude Code turn that explored, edited, and reported in one breath. That design had a real, observed failure mode.</p>
+    </div>
+
+    <blockquote class="cite">
+      <p>Earlier, a write-capable capability's tool grant covered the <em>entire</em> turn from its first token — editing and exploring shared the same permission window. Each phase now gets its own grant, scoped before ACT begins.</p>
+      <cite>— paraphrased from docs/03-architecture.md</cite>
+    </blockquote>
+
+    <div class="turns">
+      <div class="turn-card before">
+        <span class="tag">Before — single turn</span>
+        <div class="turn-bar"><span></span></div>
+        <p class="desc">Read and write tools available from the first token. Whether the model explores before it edits depends on prompt discipline alone.</p>
+      </div>
+      <div class="turn-card after">
+        <span class="tag">Now — phase loop</span>
+        <div class="turn-bar">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <p class="desc">Five separate subprocess calls. Read-only tools until ACT — a Rust-level grant per phase, applied before each subprocess starts.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">how it's fixed</p>
+      <h2>The sequence is a Rust type, checked at compile time.</h2>
+      <p>Each phase is its own subprocess invocation of <code class="mono">claude</code> (or <code class="mono">codex</code> via <code class="mono">--engine codex</code>). The model sees one phase's prompt at a time — it answers, the process exits, and ksforge decides what runs next.</p>
+    </div>
+
+    <blockquote class="cite">
+      <p><code class="mono">domain::workflow::WorkflowState::Act</code> requires an existing <code class="mono">Locate</code> value to construct. The type system defines the one path from UNDERSTAND to ACT — through LOCATE.</p>
+      <cite>— paraphrased from docs/03-architecture.md, “The phase loop”</cite>
+    </blockquote>
+  </section>
+
+  <section class="band">
+    <div class="section-head">
+      <p class="eyebrow">answered by the host</p>
+      <h2>Three questions the host answers directly.</h2>
+      <p>Each one has a documented, host-only answer, fixed before the run starts.</p>
+    </div>
+
+    <div class="q-grid">
+      <div class="q-card">
+        <div class="icon">
+          <i class="fa-solid fa-clipboard-check" aria-hidden="true"></i>
+        </div>
+        <span class="verdict">fixed by --validate</span>
+        <h3>“Is your change valid?”</h3>
+        <p>Validation commands come from your own <code class="mono">--validate</code> flags, supplied by a human or workflow author, and run <strong>after</strong> the model reports <code class="mono">completed</code> — before ksforge trusts the result.</p>
+      </div>
+      <div class="q-card">
+        <div class="icon">
+          <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+        </div>
+        <span class="verdict">verified against the filesystem</span>
+        <h3>“What did you change?”</h3>
+        <p>ksforge content-hashes every file under the workspace before and after ACT and diffs the two maps — <strong>the filesystem is ground truth</strong>; <code class="mono">changed_files</code> stays advisory.</p>
+      </div>
+      <div class="q-card">
+        <div class="icon">
+          <i class="fa-solid fa-receipt" aria-hidden="true"></i>
+        </div>
+        <span class="verdict">assembled by REPORT</span>
+        <h3>“Are you done?”</h3>
+        <p>REPORT is plain Rust, assembling the final result directly from what UNDERSTAND, LOCATE, ACT and VALIDATE already produced.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">a run, traced</p>
+      <h2>What one <code class="mono">implement</code> call actually does.</h2>
+      <p>Five subprocess calls, one working directory, each phase's tool grant fixed before it starts.</p>
+    </div>
+
+    <div class="terminal">
+      <div class="bar">
+        <div class="dots"><span></span><span></span><span></span></div>
+        <span class="title">ksforge implement — phase trace</span>
+        <button class="replay" id="replay-btn" type="button"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i> replay</button>
+      </div>
+      <pre id="trace-pre"></pre>
+    </div>
+    <p class="trace-note">Illustrative trace assembled from the documented subprocess contract in docs/03-architecture.md — the flags and phase order are real; this specific session output is a representative example.</p>
+  </section>
+
+  <section class="band">
+    <div class="section-head">
+      <p class="eyebrow">where this differs</p>
+      <h2>Two answers to “who runs the workflow.”</h2>
+      <p>Some agent tools declare a contract and hand sequencing to “the model plus your harness” at runtime. ksforge fixes the sequence in Rust, compiled into the binary, and lets the model fill in only what each phase asks for.</p>
+    </div>
+
+    <div class="switch" role="group" aria-label="Highlight an approach">
+      <button type="button" data-focus="model" aria-pressed="false">model is the runtime</button>
+      <button type="button" data-focus="host" aria-pressed="true">host is the runtime</button>
+    </div>
+
+    <div class="compare">
+      <div class="panel" data-panel="model">
+        <span class="who">declarative contract</span>
+        <h3>Model is the runtime</h3>
+        <ul>
+          <li>A <code class="mono">.contract.md</code> declares intent; a harness compiles it once into a topology.</li>
+          <li>At run time, the model plus the harness works out the steps.</li>
+          <li>Flexible across workflow shapes discovered at run time.</li>
+          <li>Enforcement of “which tool, which phase” lives inside that runtime itself.</li>
+        </ul>
+      </div>
+      <div class="panel focus" data-panel="host">
+        <span class="who">fixed state machine</span>
+        <h3>Host is the runtime</h3>
+        <ul>
+          <li>Phase order, tool grant per phase, and “done” are Rust — compiled into the binary.</li>
+          <li>A change request steers <strong>what</strong> ACT does, inside the phase order, tool grant, and VALIDATE step ksforge already fixed.</li>
+          <li>Resuming a paused run re-enters a known <code class="mono">WorkflowState</code> variant directly.</li>
+          <li>Optimized for a small, fixed capability set run unattended in CI, where a predictable phase order is the point.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="closing">
+    <div class="section-head">
+      <p class="eyebrow">why this trade</p>
+      <h2>A deliberate trade for a specific job.</h2>
+    </div>
+    <p>It's a different point in the same design space, optimized for flexibility across workflow shapes discovered at run time. ksforge optimizes for the opposite: <strong>implement / review / fix / explain</strong>, run unattended in CI, where a predictable phase order is the point.</p>
+    <p>Fixing the loop in Rust is also what makes <strong>waiting_for_human</strong> pause-and-resume reliable across a process boundary — resuming re-enters a known state directly, using the <code class="mono">WorkflowState</code> variant recorded when the run paused.</p>
+  </section>
+
+  <footer>
+    <div class="links">
+      <a href="https://github.com/chevp/ksforge/blob/main/docs/03-architecture.md" target="_blank" rel="noopener">03 — Architecture</a>
+      <a href="https://github.com/chevp/ksforge/blob/main/docs/05-capabilities.md" target="_blank" rel="noopener">05 — Capabilities</a>
+      <a href="https://github.com/chevp/ksforge/blob/main/docs/06-human-in-the-loop.md" target="_blank" rel="noopener">06 — Human-in-the-loop</a>
+      <a href="https://github.com/chevp/ksforge/blob/main/docs/08-validation.md" target="_blank" rel="noopener">08 — Validation</a>
+      <a href="https://github.com/chevp/ksforge/blob/main/docs/09-security.md" target="_blank" rel="noopener">09 — Security</a>
+      <a href="https://github.com/chevp/ksforge/blob/main/docs/13-model-outside-orchestration.md" target="_blank" rel="noopener">13 — Markdown source</a>
+      <a href="https://github.com/chevp/ksforge" target="_blank" rel="noopener"><i class="fa-brands fa-github" aria-hidden="true"></i> chevp/ksforge</a>
+    </div>
+    <p class="colophon">ksforge · MIT · a page for docs/13-model-outside-orchestration.md</p>
+    <nav class="legal">
+      <span>© <span id="copyright-year">2025</span> Patrice Chevillat</span>
+      <span class="sep">·</span>
+      <a href="https://chevp.github.io/site-policy/terms.html" target="_blank" rel="noopener">Terms</a>
+      <a href="https://chevp.github.io/site-policy/privacy.html" target="_blank" rel="noopener">Privacy</a>
+      <a href="https://chevp.github.io/site-policy/impressum.html" target="_blank" rel="noopener">Impressum</a>
+      <a href="https://chevp.github.io/site-policy/contact.html" target="_blank" rel="noopener">Contact</a>
+    </nav>
+  </footer>
+
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* copyright year, always current */
+  var yearEl = document.getElementById("copyright-year");
+  if (yearEl) yearEl.textContent = String(new Date().getFullYear());
+
+  /* gate rail accordion */
+  var details = {
+    understand: {
+      head: "UNDERSTAND — read-only, always",
+      body: "Determines what the change request needs and its rough scope. Gets Read, Grep, Glob — the same grant every capability gets here, including implement and fix. The subprocess is launched with exactly that tool set, for every capability."
+    },
+    locate: {
+      head: "LOCATE — read-only, always",
+      body: "Surveys build/test tooling, existing code, tests, conventions, config, docs. Same read-only grant as UNDERSTAND, regardless of capability. This is the phase that used to share a tool budget with editing in the old single-turn design."
+    },
+    act: {
+      head: "ACT — the capability's own policy",
+      body: "The only phase where write-capable capabilities (implement, fix) get Edit/Write and — paired specifically with acceptEdits — Bash, so the model's own build/test/lint pass can run. review and explain stay read-only even here."
+    },
+    validate: {
+      head: "VALIDATE — host-only",
+      body: "Runs your own --validate commands, in order, against the real filesystem diff, after the model reports completed. Validation commands come from that flag alone, supplied by a human or workflow author, entirely independent of the model's own output."
+    },
+    report: {
+      head: "REPORT — host-only",
+      body: "Plain Rust assembles ExecutionResult from what UNDERSTAND / LOCATE / ACT / VALIDATE already produced. By this point, the filesystem diff and validation exit codes already answer what happened, straight from prior phases."
+    }
+  };
+
+  var gates = Array.prototype.slice.call(document.querySelectorAll(".gate"));
+  var detailPanel = document.getElementById("rail-detail");
+  var openPhase = null;
+
+  function renderDetail(phase) {
+    var d = details[phase];
+    detailPanel.innerHTML =
+      '<div class="head">' + d.head + '</div><p>' + d.body + '</p>';
+  }
+
+  gates.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var phase = btn.getAttribute("data-phase");
+      var isOpen = openPhase === phase;
+
+      gates.forEach(function (g) { g.setAttribute("aria-expanded", "false"); });
+
+      if (isOpen) {
+        openPhase = null;
+        detailPanel.classList.remove("open");
+        detailPanel.innerHTML = "";
+        return;
+      }
+
+      openPhase = phase;
+      btn.setAttribute("aria-expanded", "true");
+      renderDetail(phase);
+      detailPanel.classList.add("open");
+    });
+  });
+
+  /* hero rail load-in: light each gate's top edge in sequence, then settle */
+  if (!reduceMotion) {
+    gates.forEach(function (g, i) {
+      window.setTimeout(function () {
+        g.classList.add("lit");
+        window.setTimeout(function () { g.classList.remove("lit"); }, 550);
+      }, 140 * i + 120);
+    });
+  }
+
+  /* trace terminal */
+  var traceLines = [
+    { t: 'arrow', s: '→ UNDERSTAND  ' },
+    { t: 'dim', s: 'claude -p --tools Read,Grep,Glob --json-schema <outcome>' },
+    { t: 'ok', s: '  ✓ status: completed' }, { t: 'plain', s: '  — scope only, read-only tools\n' },
+    { t: 'arrow', s: '→ LOCATE      ' },
+    { t: 'dim', s: 'claude -p --tools Read,Grep,Glob --resume <session-id>' },
+    { t: 'ok', s: '  ✓ status: completed' }, { t: 'plain', s: '  — relevant_files, conventions\n' },
+    { t: 'arrow', s: '→ ACT         ' },
+    { t: 'dim', s: 'claude -p --permission-mode acceptEdits --allowedTools Bash' },
+    { t: 'plain', s: '                ' }, { t: 'dim', s: '--resume <session-id>' },
+    { t: 'ok', s: '\n  ✓ status: completed' }, { t: 'plain', s: '  — changed_files reported (advisory)\n' },
+    { t: 'arrow', s: '→ VALIDATE    ' }, { t: 'flag', s: 'host-only' }, { t: 'plain', s: ': run --validate against the real diff\n' },
+    { t: 'ok', s: '  ✓ cargo check   ✓ cargo test\n' },
+    { t: 'arrow', s: '→ REPORT      ' }, { t: 'flag', s: 'host-only' }, { t: 'plain', s: ': ExecutionResult assembled host-side\n' },
+    { t: 'ok', s: '  ✓ Execution <id> completed' }
+  ];
+
+  var pre = document.getElementById("trace-pre");
+  var replayBtn = document.getElementById("replay-btn");
+  var typing = false;
+
+  function fullMarkup() {
+    return traceLines.map(function (l) {
+      var cls = l.t === "plain" ? "" : " class=\"" + l.t + "\"";
+      return "<span" + cls + ">" + l.s + "</span>";
+    }).join("");
+  }
+
+  function renderStatic() { pre.innerHTML = fullMarkup(); }
+
+  function typeOut() {
+    if (typing) return;
+    typing = true;
+    pre.innerHTML = "";
+    var li = 0, ci = 0;
+
+    function step() {
+      if (li >= traceLines.length) { typing = false; return; }
+      var line = traceLines[li];
+      if (ci === 0) {
+        var span = document.createElement("span");
+        if (line.t !== "plain") span.className = line.t;
+        span.setAttribute("data-live", "1");
+        pre.appendChild(span);
+      }
+      var live = pre.querySelector('[data-live="1"]');
+      ci += 1;
+      live.textContent = line.s.slice(0, ci);
+      if (ci >= line.s.length) {
+        live.removeAttribute("data-live");
+        li += 1; ci = 0;
+        window.setTimeout(step, 40);
+      } else {
+        window.setTimeout(step, 6);
+      }
+    }
+    step();
+  }
+
+  renderStatic();
+  replayBtn.addEventListener("click", function () {
+    if (reduceMotion) { renderStatic(); return; }
+    typeOut();
+  });
+
+  /* compare switch */
+  var switchBtns = Array.prototype.slice.call(document.querySelectorAll(".switch button"));
+  var panels = {
+    model: document.querySelector('.panel[data-panel="model"]'),
+    host: document.querySelector('.panel[data-panel="host"]')
+  };
+
+  switchBtns.forEach(function (b) {
+    b.addEventListener("click", function () {
+      var focus = b.getAttribute("data-focus");
+      switchBtns.forEach(function (x) {
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+      panels.model.classList.toggle("focus", focus === "model");
+      panels.host.classList.toggle("focus", focus === "host");
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

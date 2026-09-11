@@ -95,6 +95,13 @@ impl AgentExecutor for CodexExecutor {
             // Codex equivalent and is intentionally not translated below.
             PermissionMode::ReadOnly => ("read-only", "never"),
             PermissionMode::AcceptEdits => ("workspace-write", "never"),
+            // Codex has no sandbox that permits shell execution without
+            // also permitting file writes (unlike Claude Code's separate
+            // `--tools` allowlist) — `workspace-write` is the closest match.
+            // The Edit/Write restriction `ExecuteOnly` promises is enforced
+            // by `application::execute`'s post-turn workspace diff instead,
+            // not by Codex's own sandbox, for this executor.
+            PermissionMode::ExecuteOnly => ("workspace-write", "never"),
         };
         cmd.arg("--sandbox").arg(sandbox);
         cmd.arg("--ask-for-approval").arg(approval);

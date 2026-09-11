@@ -16,7 +16,7 @@ pub struct AgentOutcome {
     pub status: OutcomeStatus,
     /// Short, standalone headline for the change — used verbatim as the
     /// pull request title and commit subject (see
-    /// `prompts/policies/validation-and-output.md` §22). `None` for
+    /// `prompts/policies/validation-and-output.md` §XxOhieI). `None` for
     /// `review`/`explain` and non-`completed` statuses, which never open a
     /// PR; `github::pull_request` falls back to a truncated `summary` when
     /// a `completed` turn omits it anyway (section: never fully trust
@@ -26,13 +26,31 @@ pub struct AgentOutcome {
     pub summary: String,
     #[serde(default)]
     pub changed_files: Vec<String>,
+    /// UNDERSTAND phase only: the areas of the repository the change
+    /// request actually touches.
+    #[serde(default)]
+    pub scope: Vec<String>,
+    /// LOCATE phase only: paths relevant to the change request.
+    #[serde(default)]
+    pub relevant_files: Vec<String>,
+    /// LOCATE phase only: helpers/patterns already in the repository that
+    /// the ACT phase should reuse instead of reinventing.
+    #[serde(default)]
+    pub existing_abstractions: Vec<String>,
+    /// LOCATE phase only: existing tests covering the affected area.
+    #[serde(default)]
+    pub existing_tests: Vec<String>,
+    /// LOCATE phase only: naming/module/error-handling conventions already
+    /// in use nearby.
+    #[serde(default)]
+    pub conventions: Vec<String>,
     #[serde(default)]
     pub question: Option<String>,
     #[serde(default)]
     pub options: Vec<DecisionOption>,
     #[serde(default)]
     pub failure_reason: Option<String>,
-    /// Work done this turn, in the agent's own words (section 10/19).
+    /// Work done this turn, in the agent's own words (§t3L70Oo/§TkQFZyO).
     #[serde(default)]
     pub completed: Vec<String>,
     /// Work that remains and why — populated on `completed` when there are
@@ -42,7 +60,7 @@ pub struct AgentOutcome {
     pub open_items: Vec<String>,
     /// Free-text rationale for `recommended_option`, or for a next step
     /// when there is no pending question. `None` only when there is
-    /// genuinely no defensible preference (section 12) — never omitted to
+    /// genuinely no defensible preference (§Rfke0oG) — never omitted to
     /// save space.
     #[serde(default)]
     pub recommendation: Option<String>,
@@ -75,6 +93,26 @@ pub fn schema() -> Value {
             "title": { "type": "string" },
             "summary": { "type": "string" },
             "changed_files": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
+            "scope": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
+            "relevant_files": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
+            "existing_abstractions": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
+            "existing_tests": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
+            "conventions": {
                 "type": "array",
                 "items": { "type": "string" }
             },

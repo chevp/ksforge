@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
+use crate::color::ColorChoice;
+
 #[derive(Parser)]
 #[command(
     name = "ksforge",
@@ -9,12 +11,21 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
     about = "Turns change requests into controlled, resumable Claude Code workflows."
 )]
 pub struct Cli {
+    /// `None` means `ksforge` was invoked with no subcommand at all — the
+    /// only case that carries meaning of its own: it starts a `chat`
+    /// session with every flag at its default (docs/12-interactive-chat.md).
     #[command(subcommand)]
-    pub command: Command,
+    pub command: Option<Command>,
+
+    /// Colorize progress/diagnostic output on stderr.
+    #[arg(long, global = true, value_enum, default_value_t = ColorChoice::Auto)]
+    pub color: ColorChoice,
 }
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Start an interactive chat session. Also what bare `ksforge` runs.
+    Chat(ChatArgs),
     /// Implement a change request end to end.
     Implement(ChangeRequestArgs),
     /// Review the workspace and report findings; never modifies files.
@@ -23,25 +34,23 @@ pub enum Command {
     Fix(ChangeRequestArgs),
     /// Explain part of the workspace; never modifies files.
     Explain(ChangeRequestArgs),
+    /// Generate an image from a text prompt (stub, no real backend yet).
+    Txt2img(ChangeRequestArgs),
+    /// Transform an existing image per a text prompt (stub, no real backend yet).
+    Img2img(ChangeRequestArgs),
+    /// Add or update tests only; rejects non-test file changes.
+    Test(ChangeRequestArgs),
     /// Continue a paused execution with a human decision.
     Resume(ResumeArgs),
     /// Show an execution's state, including any pending question.
     Status(StatusArgs),
     /// Stop an execution that will not be resumed.
     Cancel(CancelArgs),
-    /// Render an execution's progress report and post/update it as a PR
-    /// comment via `gh` (section 13-15).
+    /// Post/update an execution's progress report as a PR comment via `gh`.
     PostReport(PostReportArgs),
-    /// Classify a PR/issue comment: `/ksforge choose <option>` against a
-    /// paused execution's open gate (prints the option id — chain with
-    /// `ksforge resume`), or `/ksforge implement|fix <change-request>` as a new
-    /// follow-up run (prints the capability and change request — chain with
-    /// `ksforge implement`/`ksforge fix --push-to-branch`). Never itself
-    /// starts or resumes anything (section 16-17).
+    /// Classify a PR/issue comment as a decision or a new follow-up run. Never acts itself.
     HandleComment(HandleCommentArgs),
-    /// Analyze a new change request against the workspace's other active
-    /// executions and report overlap/conflict risk — never implements
-    /// anything itself (see prompts/coordinator/system-prompt.md).
+    /// Check a change request against other active executions for conflicts. Never implements.
     Coordinate(CoordinateArgs),
     /// List available capabilities.
     Capabilities,
@@ -64,13 +73,9 @@ pub enum Engine {
 
 #[derive(Args)]
 pub struct ChangeRequestArgs {
-    /// The change request text.
-    #[arg(long, conflicts_with = "change_request_file")]
+    /// The change request text, or `@<path>` to read it from a file instead.
+    #[arg(long = "change")]
     pub change_request: Option<String>,
-
-    /// Read the change request from a file instead of `--change-request`.
-    #[arg(long, value_name = "PATH", conflicts_with = "change_request")]
-    pub change_request_file: Option<PathBuf>,
 
     #[command(flatten)]
     pub common: CommonArgs,
@@ -81,13 +86,9 @@ pub struct ChangeRequestArgs {
 /// `--push-to-branch`/`--mcp-config` to expose.
 #[derive(Args)]
 pub struct CoordinateArgs {
-    /// The change request text.
-    #[arg(long, conflicts_with = "change_request_file")]
+    /// The change request text, or `@<path>` to read it from a file instead.
+    #[arg(long = "change")]
     pub change_request: Option<String>,
-
-    /// Read the change request from a file instead of `--change-request`.
-    #[arg(long, value_name = "PATH", conflicts_with = "change_request")]
-    pub change_request_file: Option<PathBuf>,
 
     /// Workspace whose active executions to analyze against.
     #[arg(long, default_value = ".")]
@@ -116,6 +117,82 @@ pub struct CoordinateArgs {
     pub format: OutputFormat,
 }
 
+/// A subset of `CommonArgs` (docs/12-interactive-chat.md): chat has exactly
+/// one output mode (a text transcript) and exactly one merge-back mechanism
+/// (local), so `--format`/`--create-pull-request`/`--push-to-branch` are not
+/// exposed here — GitHub/`gh` are not involved in chat at all.
+#[derive(Args)]
+pub struct ChatArgs {
+    /// Workspace root; must be a git repository.
+    #[arg(long, default_value = ".")]
+    pub workspace: PathBuf,
+
+    /// Which coding agent CLI to spawn.
+    #[arg(long, value_enum, default_value_t = Engine::Claude)]
+    pub engine: Engine,
+
+    /// Model alias or full name — same `--engine`-dependent default
+    /// behavior as `CommonArgs::model`.
+    #[arg(long)]
+    pub model: Option<String>,
+
+    /// Maximum dollar amount the agent may spend on a single chat turn, not
+    /// the whole session.
+    #[arg(long)]
+    pub max_budget_usd: Option<f64>,
+
+    #[arg(long, env = "KSFORGE_CLAUDE_PATH", value_name = "PATH")]
+    pub claude_path: Option<PathBuf>,
+
+    #[arg(long, env = "KSFORGE_CODEX_PATH", value_name = "PATH")]
+    pub codex_path: Option<PathBuf>,
+
+    /// Run every turn in an isolated temporary copy of the workspace.
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Repeatable; exact commands to run after ACT, in addition to the
+    /// agent-driven VALIDATE turn every run gets by default. Applied to
+    /// every turn, same as the other capabilities.
+    #[arg(long = "validate", value_name = "COMMAND")]
+    pub validate: Vec<String>,
+
+    /// Skip the agent-driven VALIDATE turn (but not `--validate` commands,
+    /// which still run if given).
+    #[arg(long)]
+    pub no_validate: bool,
+
+    /// The branch chat merges completed changes back into, after
+    /// confirmation.
+    #[arg(long, default_value = "main")]
+    pub base_branch: String,
+
+    #[arg(long, value_name = "PATH")]
+    pub mcp_config: Option<PathBuf>,
+}
+
+/// Built when `ksforge` is invoked with no subcommand at all — bypasses
+/// clap parsing entirely, so `KSFORGE_CLAUDE_PATH`/`KSFORGE_CODEX_PATH` are
+/// read directly here to keep that one behavior clap's `env` attribute
+/// would otherwise provide.
+impl Default for ChatArgs {
+    fn default() -> Self {
+        Self {
+            workspace: PathBuf::from("."),
+            engine: Engine::default(),
+            model: None,
+            max_budget_usd: None,
+            claude_path: std::env::var_os("KSFORGE_CLAUDE_PATH").map(PathBuf::from),
+            codex_path: std::env::var_os("KSFORGE_CODEX_PATH").map(PathBuf::from),
+            dry_run: false,
+            validate: Vec::new(),
+            no_validate: false,
+            base_branch: "main".to_string(),
+            mcp_config: None,
+        }
+    }
+}
+
 #[derive(Args)]
 pub struct ResumeArgs {
     pub execution_id: String,
@@ -124,9 +201,7 @@ pub struct ResumeArgs {
     #[arg(long)]
     pub decision: String,
 
-    /// Who decided — a GitHub login when resuming from a `/ksforge choose`
-    /// comment (see `ksforge handle-comment`). Omitted for a plain local
-    /// resume.
+    /// Who decided; a GitHub login when resuming via a PR comment.
     #[arg(long)]
     pub decided_by: Option<String>,
 
@@ -136,9 +211,13 @@ pub struct ResumeArgs {
 
 #[derive(Args)]
 pub struct StatusArgs {
-    pub execution_id: String,
+    /// Execution to show. Omit for a workspace-wide overview instead: every
+    /// git repo found under `--workspace` plus each one's active
+    /// executions (see docs/04-cli-reference.md).
+    pub execution_id: Option<String>,
 
-    /// Workspace whose `.ksforge/executions` store to read.
+    /// Workspace whose `.ksforge/executions` store to read — or, with no
+    /// `execution_id`, the root to discover repos under.
     #[arg(long, default_value = ".")]
     pub workspace: PathBuf,
 
@@ -178,23 +257,15 @@ pub struct PostReportArgs {
 
 #[derive(Args)]
 pub struct HandleCommentArgs {
-    /// The execution the comment is replying to. Required for a
-    /// `/ksforge choose <option>` reply to a pending decision; omit for a
-    /// `/ksforge implement|fix <change-request>` follow-up, which has no execution
-    /// yet — start one with a normal `ksforge implement`/`ksforge fix`
-    /// call using this command's output (section: does not itself act,
-    /// same as the choose-flow — chain the two).
+    /// The execution the comment is replying to; omit for a new follow-up run.
     #[arg(long)]
     pub execution_id: Option<String>,
 
-    /// The GitHub comment's own numeric id — the idempotency key (section
-    /// 17): the same comment delivered twice must not be acted on twice.
+    /// The GitHub comment's numeric id; prevents double-processing.
     #[arg(long)]
     pub comment_id: String,
 
-    /// The commenter's GitHub login. Re-verified against the repository's
-    /// own permission list before the decision is accepted (section 23) —
-    /// never trusted just because a workflow's `if:` already checked it.
+    /// The commenter's GitHub login; re-verified against repo permissions.
     #[arg(long)]
     pub commenter: String,
 
@@ -210,25 +281,17 @@ pub struct HandleCommentArgs {
 
 #[derive(Args)]
 pub struct CommonArgs {
-    /// Workspace root ksforge and Claude Code operate in. Defaults to the
-    /// current directory (section 26: local CLI needs no GitHub token).
+    /// Workspace root ksforge and Claude Code operate in.
     #[arg(long, default_value = ".")]
     pub workspace: PathBuf,
 
-    /// Which coding agent CLI to spawn. "codex" cannot honor
-    /// `--mcp-config`/`--max-budget-usd` (no Codex CLI equivalent) — passing
-    /// either with `--engine codex` fails the run rather than silently
-    /// dropping them.
+    /// Which coding agent CLI to spawn. codex rejects
+    /// `--mcp-config`/`--max-budget-usd`.
     #[arg(long, value_enum, default_value_t = Engine::Claude)]
     pub engine: Engine,
 
-    /// Model alias or full name, e.g. "sonnet"/"claude-sonnet-5" for
-    /// `--engine claude`, or a Codex model name for `--engine codex`. With
-    /// `--engine claude` and no explicit value, defaults to "sonnet" rather
-    /// than deferring to Claude Code's own default, so ksforge's
-    /// cost/behavior doesn't shift silently if that changes; with
-    /// `--engine codex`, an unset value defers to Codex's own configured
-    /// default instead of wrongly passing it the Claude alias "sonnet".
+    /// Model alias or full name. Defaults to "sonnet" for `--engine claude`;
+    /// `--engine codex` uses Codex's own default.
     #[arg(long)]
     pub model: Option<String>,
 
@@ -237,8 +300,7 @@ pub struct CommonArgs {
     #[arg(long)]
     pub max_budget_usd: Option<f64>,
 
-    /// Explicit path to the Claude Code executable; otherwise resolved
-    /// from PATH (section 32).
+    /// Explicit path to the Claude Code executable; otherwise resolved from PATH.
     #[arg(long, env = "KSFORGE_CLAUDE_PATH", value_name = "PATH")]
     pub claude_path: Option<PathBuf>,
 
@@ -247,16 +309,23 @@ pub struct CommonArgs {
     #[arg(long, env = "KSFORGE_CODEX_PATH", value_name = "PATH")]
     pub codex_path: Option<PathBuf>,
 
-    /// Run in an isolated temporary copy of the workspace; nothing is
-    /// written back to the real workspace (section 25).
+    /// Run in an isolated temporary copy of the workspace; nothing is written back.
     #[arg(long)]
     pub dry_run: bool,
 
-    /// Repeatable. A shell command to run after Claude Code reports
-    /// success, before ksforge trusts the result (section 21). Never
-    /// supplied or overridable by the model.
+    /// Repeatable. An exact shell command to run after ACT reports success,
+    /// in addition to (not instead of) the agent-driven VALIDATE turn every
+    /// run gets by default — that turn works out what actually needs
+    /// checking for this specific change and does it, rather than ksforge
+    /// hardcoding a per-project-type command. Use `--no-validate` to skip
+    /// just that turn; commands passed here still run either way.
     #[arg(long = "validate", value_name = "COMMAND")]
     pub validate: Vec<String>,
+
+    /// Skip the agent-driven VALIDATE turn (but not `--validate` commands,
+    /// which still run if given).
+    #[arg(long)]
+    pub no_validate: bool,
 
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
@@ -265,24 +334,16 @@ pub struct CommonArgs {
     #[arg(long, conflicts_with = "push_to_branch")]
     pub create_pull_request: bool,
 
-    /// Base branch for `--create-pull-request` (section 19).
+    /// Base branch for `--create-pull-request`.
     #[arg(long, default_value = "main")]
     pub base_branch: String,
 
-    /// Commit and push changes directly to the already-checked-out branch
-    /// instead of opening a new PR — for a PR follow-up run (`ksforge
-    /// handle-comment` classified a `/ksforge implement|fix <change-request>`
-    /// comment): the workspace is already a checkout of that PR's own
-    /// head branch, so this updates the existing PR rather than opening
-    /// a new one the way `--create-pull-request` would. See
-    /// docs/07-github-actions.md.
+    /// Commit and push directly to the checked-out branch instead of
+    /// opening a new PR.
     #[arg(long, conflicts_with = "create_pull_request")]
     pub push_to_branch: bool,
 
-    /// Path to a Claude Code `--mcp-config` file, giving the agent access
-    /// to additional MCP servers (e.g. read-only access to an external
-    /// system) for this run — passed straight through, together with
-    /// `--strict-mcp-config`. See docs/11-integrations.md.
+    /// Path to a Claude Code `--mcp-config` file, passed straight through.
     #[arg(long, value_name = "PATH")]
     pub mcp_config: Option<PathBuf>,
 }

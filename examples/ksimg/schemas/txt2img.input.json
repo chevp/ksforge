@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ksimg.example/schemas/txt2img.input.json",
+  "title": "txt2img input",
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": "string",
+      "description": "Prompt describing the desired image."
+    },
+    "style": {
+      "type": "string",
+      "description": "Optional visual style hint."
+    }
+  },
+  "required": ["text"]
+}

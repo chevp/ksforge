@@ -15,7 +15,7 @@ const SYSTEM_PROMPT: &str = include_str!("../../prompts/coordinator/system-promp
 
 /// Reports how a new change request relates to the workspace's other
 /// active executions, without implementing anything itself (the
-/// coordinator's own §1: "You do not implement application changes
+/// coordinator's own §BLj9y9b: "You do not implement application changes
 /// yourself"). Read-only, same tool policy as `review`/`explain`.
 pub async fn coordinate(
     workspace_root: &Path,
@@ -51,7 +51,7 @@ pub async fn coordinate(
 
 /// `Running`/`WaitingForHuman` — a `Completed`/`Failed`/`Cancelled`
 /// execution is finished work, not something a new change request could
-/// still collide with (see the coordinator's §11 for the separate case of
+/// still collide with (see the coordinator's §hdJave0 for the separate case of
 /// *completed but not yet integrated* work, which this simple filter does
 /// not yet distinguish from truly finished work).
 fn active_executions(workspace_root: &Path) -> Result<Vec<Execution>> {

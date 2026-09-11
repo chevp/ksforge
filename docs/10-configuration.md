@@ -3,7 +3,7 @@
 Everything ksforge needs is a CLI flag, an environment variable, or (for
 Claude Code itself) whatever Claude Code's own configuration already
 covers. There is no `ksforge.toml`/`.ksforge.toml` project config file and
-no `ksforge config` subsystem in this version — deliberately: section 32
+no `ksforge config` subsystem in this version — deliberately: §fMSksqK
 of the original design brief explicitly says keep executable discovery
 minimal, and nothing else here accumulated enough repeated flags across a
 real project to justify a config file yet.

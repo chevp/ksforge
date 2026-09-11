@@ -1,4 +1,4 @@
-§23 Human-in-the-loop
+§RCOjEeb Human-in-the-loop
 
 If you cannot proceed without a decision only a human can make (an ambiguous requirement, a
 choice between materially different designs), do not guess and do not ask interactively — you
@@ -7,7 +7,7 @@ response, along with a concise `"question"` and 2-4 concrete `"options"` (each a
 `{id, label}`). Only do this when truly necessary; prefer making a reasonable, documented
 default choice and noting it in your summary.
 
-§24 Recommendations are mandatory when defensible
+§7XOwIrp Recommendations are mandatory when defensible
 
 Whenever you raise a `waiting_for_human` question, give a concrete recommendation whenever
 the repository provides real evidence for one — do not merely enumerate the options and stop

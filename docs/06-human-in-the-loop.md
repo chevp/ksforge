@@ -24,6 +24,16 @@ process exits, code 6                   changes validated, PR opened
 (nothing was blocked)
 ```
 
+This two-run split is what a CI job needs, and is always what happens
+there — a runner's stdio is never a terminal. Run the same command by hand
+in a real console instead, and ksforge shortcuts it: it prompts for the
+decision right there and resumes in the same process, without a second
+`ksforge resume` invocation (see "Waiting for human input: console vs. CI"
+in [04-cli-reference.md](04-cli-reference.md)). Same state machine, same
+`Execution`, same `--decision <option-id>` validation either way — only
+whether a human answers synchronously or the process exits and waits
+differs.
+
 ## The state machine
 
 ```text
@@ -70,7 +80,7 @@ the installed Claude Code CLI (see [03-architecture.md](03-architecture.md)
 for what was verified vs. inferred about the envelope this arrives in).
 
 `completed`/`open_items`/`recommendation`/`recommended_option` are the
-structured progress-reporting fields (section 10-12 of the human-in-the-loop
+structured progress-reporting fields (§t3L70Oo/§nU95phP/§Rfke0oG of the human-in-the-loop
 spec this was built against): Claude Code, not ksforge, produces the
 human-facing "what's done / what's open / what do you recommend" narrative,
 and `github::report::render` turns it into a PR comment — ksforge itself
@@ -143,7 +153,7 @@ disappears the moment a job ends. Two complementary answers:
      `admin`/`write` only; see [09-security.md](09-security.md)), validates
      the option against the execution's open gate, and records the GitHub
      comment id so a duplicate delivery of the same webhook is a no-op
-     (section 17). On success it prints the validated option id and, when
+     (§DlruVSP). On success it prints the validated option id and, when
      `GITHUB_OUTPUT` is set, writes `execution-id=`/`decision=` for the next
      step.
    - It does **not** call `resume` itself — chain it:

@@ -35,7 +35,7 @@ impl ExecutionStore {
 
     /// Record that `event_id` (a GitHub comment id) has already been acted
     /// on for this execution, so a duplicate webhook delivery is a no-op
-    /// (section 17) instead of a second resume attempt. A marker file, same
+    /// (§DlruVSP) instead of a second resume attempt. A marker file, same
     /// pattern as `request.json`/`state.json` — no database, no daemon.
     pub fn mark_event_processed(&self, id: &ExecutionId, event_id: &str) -> Result<()> {
         let path = self.processed_event_path(id, event_id);
@@ -88,7 +88,7 @@ impl ExecutionStore {
     /// Every `Execution` currently on disk under this store, for the
     /// coordination agent (`application::coordinate`) to build a picture of
     /// concurrent work from — see `prompts/coordinator/system-prompt.md`
-    /// §4/§10/§11. A missing or unreadable `state.json` in one execution's
+    /// §BTDXyaH/§mo8Nl7V/§hdJave0. A missing or unreadable `state.json` in one execution's
     /// directory is skipped rather than failing the whole scan (a
     /// partially written file from a concurrent run is expected, not
     /// corruption to surface as an error).

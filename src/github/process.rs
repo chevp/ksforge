@@ -6,7 +6,7 @@ use crate::domain::{KsforgeError, Result};
 
 /// The one place ksforge spawns `git`/`gh` subprocesses. `pull_request`,
 /// `comment`, and `decision` all go through this rather than each shelling
-/// out independently (section 20: Git/GitHub are infrastructure, and one
+/// out independently (§HFNMflB: Git/GitHub are infrastructure, and one
 /// infrastructure detail — how a subprocess is run and its failure
 /// reported — belongs in one place).
 pub(crate) async fn run(cwd: &Path, program: &str, args: &[&str]) -> Result<String> {

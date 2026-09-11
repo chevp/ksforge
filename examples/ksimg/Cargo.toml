@@ -1,0 +1,9 @@
+[package]
+name = "ksimg"
+version = "0.1.0"
+edition = "2024"
+description = "Example: agent-proposed, deterministically executed image-processing workflows on a state-machine runtime"
+license = "MIT"
+publish = false
+
+[dependencies]

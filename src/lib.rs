@@ -7,6 +7,7 @@
 pub mod agent;
 pub mod application;
 pub mod cli;
+pub mod color;
 pub mod domain;
 pub mod github;
 pub mod validation;

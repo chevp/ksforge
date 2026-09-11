@@ -64,3 +64,16 @@ pub fn read_only_constraints() -> Vec<Constraint> {
     ));
     c
 }
+
+pub fn test_only_constraints() -> Vec<Constraint> {
+    let mut c = write_constraints();
+    c.push(Constraint::new(
+        "tests-only",
+        "Only add or modify test files, or add tests colocated in an existing file where that \
+         is the language's own convention (e.g. Rust's #[cfg(test)] mod tests). Never change \
+         application/library source, configuration, or build files — ksforge checks the files \
+         you touched against this rule after this phase and rejects the run if any fall \
+         outside it, regardless of what you report.",
+    ));
+    c
+}

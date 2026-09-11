@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ksimg.example/schemas/segmentation.output.json",
+  "title": "segmentation output",
+  "type": "object",
+  "properties": {
+    "mask_id": { "type": "string" },
+    "data_type": { "const": "Mask" }
+  },
+  "required": ["mask_id", "data_type"]
+}

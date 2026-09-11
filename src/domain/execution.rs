@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::change_request::ChangeRequest;
+use super::workflow::WorkflowState;
 
 /// Identifier for a persisted [`Execution`]. Format: `ksf_<uuidv4 simple>`,
 /// e.g. `ksf_2f8b6a1c9d3e4f5a8b7c6d5e4f3a2b1c`. Not a Git concept — purely a
@@ -94,7 +95,7 @@ pub struct DecisionOption {
 
 /// Raised when Claude Code reports it needs a human decision to continue —
 /// a "gate" in spec terms. Addressed by its own [`GateId`], not by the
-/// execution id or the question text (section 6).
+/// execution id or the question text (§UKoR4HU).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HumanDecisionRequest {
     #[serde(default)]
@@ -104,7 +105,7 @@ pub struct HumanDecisionRequest {
     pub options: Vec<DecisionOption>,
     pub required: bool,
     /// Option id Claude Code recommends, when it could form a defensible
-    /// preference from repository evidence (section 12). `None` means no
+    /// preference from repository evidence (§Rfke0oG). `None` means no
     /// recommendation was offered, not that one was omitted by accident.
     #[serde(default)]
     pub recommended_option: Option<String>,
@@ -112,7 +113,7 @@ pub struct HumanDecisionRequest {
     /// the agent gave none.
     #[serde(default)]
     pub context: String,
-    /// What was already done before this gate was raised (section 14: the
+    /// What was already done before this gate was raised (§qHiXmf0: the
     /// "Completed" list on a waiting-for-human report).
     #[serde(default)]
     pub completed: Vec<String>,
@@ -193,9 +194,29 @@ pub struct ValidationCommandOutcome {
 pub struct ValidationOutcome {
     pub passed: bool,
     pub commands: Vec<ValidationCommandOutcome>,
+    /// Set when `ValidationPolicy::agent_review` ran a VALIDATE turn.
+    #[serde(default)]
+    pub agent_review: Option<AgentValidationReport>,
 }
 
-/// Terminal payload of a completed or failed execution (section 22 of the
+/// What the VALIDATE turn (`prompts/phases/validate.md`) reported after
+/// checking the ACT phase's change with real tool access. Distinct from
+/// `ActionResult` (ACT's own self-report) — a second, independent look.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentValidationReport {
+    pub summary: String,
+    #[serde(default)]
+    pub completed: Vec<String>,
+    /// Problems the agent noticed while validating but that were not this
+    /// change request's job to fix (§hQnJPKM step 3: cheap to flag while the
+    /// context is already loaded).
+    #[serde(default)]
+    pub open_items: Vec<String>,
+    #[serde(default)]
+    pub recommendation: Option<String>,
+}
+
+/// Terminal payload of a completed or failed execution (§ICliZRW of the
 /// spec). Distinct from `Execution` itself: this is the small, stable
 /// result snapshot; `Execution` is the durable envelope/state machine.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -209,7 +230,7 @@ pub struct ExecutionResult {
     pub summary: String,
     pub changed_files: Vec<PathBuf>,
     pub validation: ValidationOutcome,
-    /// Work Claude Code reported as done this run (section 10/19). Empty
+    /// Work Claude Code reported as done this run (§t3L70Oo/§TkQFZyO). Empty
     /// when the agent didn't report any — not synthesized by ksforge.
     #[serde(default)]
     pub completed: Vec<String>,
@@ -232,12 +253,19 @@ pub struct Execution {
     pub capability: String,
     pub status: ExecutionStatus,
     pub current_step: String,
+    /// The UNDERSTAND -> LOCATE -> ACT -> VALIDATE -> REPORT state machine
+    /// (`domain::workflow`) — host-enforced, not a prompt convention.
+    /// `#[serde(default)]` lands an execution persisted before this field
+    /// existed on `WorkflowState::Legacy`; `resume()` refuses those rather
+    /// than guessing which phase they were in.
+    #[serde(default)]
+    pub workflow: WorkflowState,
     pub artifacts: Vec<PathBuf>,
     pub messages: Vec<ExecutionEvent>,
     pub pending_question: Option<HumanDecisionRequest>,
     /// Every gate ever raised on this execution, in order — the durable
-    /// history spec §18/19 need for a multi-gate final report and for
-    /// telling "already resolved" apart from "unknown gate" (section 6/17).
+    /// history spec §djDLEGq/§TkQFZyO need for a multi-gate final report and for
+    /// telling "already resolved" apart from "unknown gate" (§UKoR4HU/§DlruVSP).
     /// `pending_question`, when `Some`, is always `gates.last()`.
     #[serde(default)]
     pub gates: Vec<HumanDecisionRequest>,
@@ -261,6 +289,7 @@ impl Execution {
             capability: capability.clone(),
             status: ExecutionStatus::Running,
             current_step: "started".into(),
+            workflow: WorkflowState::start(),
             artifacts: Vec::new(),
             messages: Vec::new(),
             pending_question: None,
@@ -280,6 +309,17 @@ impl Execution {
     pub fn record(&mut self, event: ExecutionEvent) {
         self.updated_at = Utc::now();
         self.messages.push(event);
+    }
+
+    /// Move to the next `WorkflowState` (already validated by the caller via
+    /// `WorkflowState::complete_*`) and mirror its phase into `current_step`
+    /// for display. Does not itself record an `ExecutionEvent` — callers
+    /// that start a new agent turn still record `AgentStarted` themselves,
+    /// same as before this phase loop existed.
+    pub fn advance(&mut self, state: WorkflowState) {
+        self.current_step = state.phase().as_str().to_string();
+        self.workflow = state;
+        self.updated_at = Utc::now();
     }
 
     pub fn ask(
@@ -312,7 +352,7 @@ impl Execution {
     }
 
     /// The gate currently awaiting a decision, if any — `pending_question`
-    /// under its "gate" name (section 6/16: a comment-driven decision
+    /// under its "gate" name (§UKoR4HU/§pewY5yG: a comment-driven decision
     /// addresses a `GateId`, not just "the execution").
     pub fn open_gate(&self) -> Option<&HumanDecisionRequest> {
         self.pending_question.as_ref()
@@ -363,7 +403,7 @@ impl Execution {
 
     /// Deliberately stop an execution that is not going to be resumed —
     /// distinct from `fail`: cancellation is a human/operator choice, not
-    /// an error the agent or validation reported (spec §4/20).
+    /// an error the agent or validation reported (spec §xjZiT6h/§HFNMflB).
     pub fn cancel(&mut self, reason: impl Into<String>) {
         let reason = reason.into();
         self.pending_question = None;

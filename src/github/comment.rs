@@ -6,7 +6,7 @@ use super::process::run_gh;
 use super::report;
 
 /// Post or update the ksforge status/decision comment on a pull request
-/// (section 13-15). Finds the existing comment carrying this execution's
+/// (§egkEINs/§qHiXmf0/§sTdJsQn). Finds the existing comment carrying this execution's
 /// marker (if any) and updates it in place rather than appending a new
 /// comment on every status change — the PR should stay readable.
 pub async fn post_or_update_report(

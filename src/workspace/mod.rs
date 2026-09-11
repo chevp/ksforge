@@ -1,6 +1,6 @@
 //! Filesystem concerns: the workspace root, dry-run isolation, change
 //! detection, and durable `Execution` storage. No Git dependency anywhere
-//! in this module (section 20/27).
+//! in this module (§HFNMflB/§3kuclkU).
 
 pub mod change_request_archive;
 pub mod isolate;
