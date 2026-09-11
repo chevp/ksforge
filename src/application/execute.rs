@@ -101,19 +101,69 @@ fn first_line(text: &str) -> &str {
     text.lines().next().unwrap_or("")
 }
 
+/// A compact, human-legible stand-in for the `claude` invocation behind a
+/// phase turn — curated for legibility, not a literal argv dump. The real
+/// command also carries `--output-format stream-json --verbose
+/// --permission-prompts none --model <name>` and the full prompt/schema
+/// text on every turn (see docs/03-architecture.md's "Claude Code
+/// subprocess contract" for the exact flags actually sent); those are
+/// constant across every turn and add nothing worth reading here, so this
+/// only shows what actually differs turn to turn: tool scope, write
+/// permission, and whether the turn continues a prior session.
+fn claude_invocation(tools: &[String], permission_mode: PermissionMode, resume: bool) -> String {
+    let mut parts = vec!["claude".to_string(), "-p".to_string()];
+    if !tools.is_empty() {
+        parts.push("--tools".to_string());
+        parts.push(tools.join(","));
+    }
+    match permission_mode {
+        PermissionMode::ReadOnly => {}
+        PermissionMode::AcceptEdits | PermissionMode::ExecuteOnly => {
+            let mode = if permission_mode == PermissionMode::AcceptEdits {
+                "acceptEdits"
+            } else {
+                "default"
+            };
+            parts.push("--permission-mode".to_string());
+            parts.push(mode.to_string());
+            parts.push("--allowedTools".to_string());
+            parts.push("Bash,PowerShell".to_string());
+        }
+    }
+    if resume {
+        parts.push("--resume".to_string());
+        parts.push("<session-id>".to_string());
+    }
+    parts.push("--json-schema".to_string());
+    parts.push("<outcome>".to_string());
+    parts.join(" ")
+}
+
 /// Phase-progress banners on stderr, colored like `cargo`/`rustc`'s own
-/// status lines (bold cyan for in-progress, bold green for done, bold red
-/// for failed) — see `crate::color` for why this is stderr-only.
-fn phase_start(line: &str) {
-    eprintln!("\n{}", color::paint(line, Color::Cyan, true));
+/// status lines: a bold cyan `→ NAME  <mechanism>` header when a phase
+/// turn starts (`mechanism` is either `claude_invocation`'s output for an
+/// LLM turn, or a `host-only: ...` description for a phase with no agent
+/// call at all — VALIDATE's `--validate` commands, REPORT), and an
+/// indented result line once it's done: green `✓` (completed), red `✗`
+/// (failed), or yellow `⏸` (paused on a human decision) — see
+/// `crate::color` for why this is stderr-only.
+fn phase_header(name: &str, mechanism: &str) {
+    eprintln!(
+        "\n{} {mechanism}",
+        color::paint(&format!("→ {name:<10}"), Color::Cyan, true)
+    );
 }
 
-fn phase_done(line: &str) {
-    eprintln!("{}", color::paint(line, Color::Green, true));
+fn phase_ok(detail: &str) {
+    eprintln!("  {} {detail}", color::paint("✓", Color::Green, true));
 }
 
-fn phase_failed(line: &str) {
-    eprintln!("{}", color::paint(line, Color::Red, true));
+fn phase_fail(detail: &str) {
+    eprintln!("  {} {detail}", color::paint("✗", Color::Red, true));
+}
+
+fn phase_wait(detail: &str) {
+    eprintln!("  {} {detail}", color::paint("⏸", Color::Yellow, true));
 }
 
 /// What an LLM phase turn (UNDERSTAND/LOCATE/ACT) produced. VALIDATE/REPORT
@@ -227,20 +277,26 @@ async fn run_llm_phase(
             // accepts a decision matching one of `pending.options[].id`) —
             // that is a dead end, not a valid pause. Fail loudly instead of
             // parking the execution somewhere it can never leave.
-            execution.workflow = current;
-            execution.fail(format!(
+            let reason = format!(
                 "agent asked a question without offering any options: {}",
                 outcome
                     .question
                     .unwrap_or_else(|| "(no question text)".to_string())
-            ));
+            );
+            phase_fail(&format!("status: failed — {}", first_line(&reason)));
+            execution.workflow = current;
+            execution.fail(reason);
             Ok(PhaseTurn::Stopped)
         }
         OutcomeStatus::WaitingForHuman if capability.supports_human_interaction() => {
-            execution.workflow = current;
             let question = outcome
                 .question
                 .unwrap_or_else(|| "Claude Code needs a decision to continue.".to_string());
+            phase_wait(&format!(
+                "status: waiting_for_human — {}",
+                first_line(&question)
+            ));
+            execution.workflow = current;
             let options: Vec<DecisionOption> = outcome.options;
             // A recommendation that names an option the agent didn't
             // actually offer is not trustworthy — drop it rather than
@@ -262,17 +318,21 @@ async fn run_llm_phase(
             // This capability never offered the human-interaction protocol
             // in its prompt, so a `waiting_for_human` reply here means the
             // agent output could not be trusted to follow instructions.
-            execution.workflow = current;
-            execution.fail(format!(
+            let reason = format!(
                 "{} does not support human-in-the-loop decisions, but the agent asked one: {}",
                 capability.id(),
                 outcome.question.unwrap_or_default()
-            ));
+            );
+            phase_fail(&format!("status: failed — {}", first_line(&reason)));
+            execution.workflow = current;
+            execution.fail(reason);
             Ok(PhaseTurn::Stopped)
         }
         OutcomeStatus::Failed => {
+            let reason = outcome.failure_reason.unwrap_or(outcome.summary);
+            phase_fail(&format!("status: failed — {}", first_line(&reason)));
             execution.workflow = current;
-            execution.fail(outcome.failure_reason.unwrap_or(outcome.summary));
+            execution.fail(reason);
             Ok(PhaseTurn::Stopped)
         }
         OutcomeStatus::Completed => Ok(PhaseTurn::Advance(Box::new(outcome))),
@@ -300,13 +360,16 @@ pub(crate) async fn run_phase_loop(
         let state = std::mem::take(&mut execution.workflow);
         match state {
             WorkflowState::Understand => {
-                phase_start("== Understand: analyzing the change request ==");
+                let (tools, permission_mode) = tools_and_permission(ToolPolicy::ReadOnly);
+                phase_header(
+                    "UNDERSTAND",
+                    &claude_invocation(&tools, permission_mode, session_id.is_some()),
+                );
                 let (system_prompt, mut user_prompt) =
                     prompt::for_understand(capability, request, working_dir);
                 if let Some(suffix) = decision_suffix.take() {
                     user_prompt.push_str(&suffix);
                 }
-                let (tools, permission_mode) = tools_and_permission(ToolPolicy::ReadOnly);
                 let turn = run_llm_phase(
                     execution,
                     capability,
@@ -328,8 +391,8 @@ pub(crate) async fn run_phase_loop(
                     summary: outcome.summary,
                     scope: outcome.scope,
                 };
-                phase_done(&format!(
-                    "== Understand: done — {} ==",
+                phase_ok(&format!(
+                    "status: completed — {}",
                     first_line(&understanding.summary)
                 ));
                 let next = WorkflowState::Understand
@@ -339,7 +402,11 @@ pub(crate) async fn run_phase_loop(
                 store.save(execution)?;
             }
             WorkflowState::Locate { understanding } => {
-                phase_start("== Locate: finding relevant files and conventions ==");
+                let (tools, permission_mode) = tools_and_permission(ToolPolicy::ReadOnly);
+                phase_header(
+                    "LOCATE",
+                    &claude_invocation(&tools, permission_mode, session_id.is_some()),
+                );
                 let (system_prompt, mut user_prompt) =
                     prompt::for_locate(capability, request, working_dir, &understanding);
                 if let Some(suffix) = decision_suffix.take() {
@@ -348,7 +415,6 @@ pub(crate) async fn run_phase_loop(
                 let current = WorkflowState::Locate {
                     understanding: understanding.clone(),
                 };
-                let (tools, permission_mode) = tools_and_permission(ToolPolicy::ReadOnly);
                 let turn = run_llm_phase(
                     execution,
                     capability,
@@ -372,8 +438,8 @@ pub(crate) async fn run_phase_loop(
                     existing_tests: outcome.existing_tests,
                     conventions: outcome.conventions,
                 };
-                phase_done(&format!(
-                    "== Locate: done — {} relevant file(s) ==",
+                phase_ok(&format!(
+                    "status: completed — {} relevant file(s)",
                     located.relevant_files.len()
                 ));
                 let next = current
@@ -386,7 +452,11 @@ pub(crate) async fn run_phase_loop(
                 understanding,
                 located,
             } => {
-                phase_start("== Act: implementing the change ==");
+                let (tools, permission_mode) = tools_and_permission(capability.tool_policy());
+                phase_header(
+                    "ACT",
+                    &claude_invocation(&tools, permission_mode, session_id.is_some()),
+                );
                 // Understand/Locate are read-only, so nothing could have
                 // changed the tree before this point — safe to snapshot
                 // right here rather than at the very start of the run.
@@ -400,7 +470,6 @@ pub(crate) async fn run_phase_loop(
                     understanding: understanding.clone(),
                     located: located.clone(),
                 };
-                let (tools, permission_mode) = tools_and_permission(capability.tool_policy());
                 let turn = run_llm_phase(
                     execution,
                     capability,
@@ -441,8 +510,8 @@ pub(crate) async fn run_phase_loop(
                             .map(|p| p.display().to_string())
                             .collect::<Vec<_>>()
                             .join(", ");
-                        phase_failed(&format!(
-                            "== Act: failed — touched files outside scope: {paths} =="
+                        phase_fail(&format!(
+                            "status: failed — touched files outside scope: {paths}"
                         ));
                         execution.workflow = current;
                         execution.fail(format!(
@@ -456,8 +525,8 @@ pub(crate) async fn run_phase_loop(
 
                 let kind = ActionKind::derive(capability.id(), changed_files.is_empty());
 
-                phase_done(&format!(
-                    "== Act: done — {} file(s) changed ==",
+                phase_ok(&format!(
+                    "status: completed — {} file(s) changed (filesystem diff, not the agent's own report)",
                     changed_files.len()
                 ));
 
@@ -495,10 +564,10 @@ pub(crate) async fn run_phase_loop(
                 // — unchanged from before, still never decided by the model.
                 let mut command_outcomes = Vec::new();
                 if !request.validation.commands.is_empty() {
-                    phase_start(&format!(
-                        "== Validate: running {} command(s) ==",
-                        request.validation.commands.len()
-                    ));
+                    phase_header(
+                        "VALIDATE",
+                        "host-only: run --validate against the real diff",
+                    );
                     let outcome =
                         validation::run(&request.validation.commands, working_dir).await?;
                     if !outcome.passed {
@@ -507,7 +576,6 @@ pub(crate) async fn run_phase_loop(
                             .last()
                             .map(|c| format!("`{}` failed", c.command))
                             .unwrap_or_else(|| "validation failed".into());
-                        phase_failed(&format!("== Validate: failed — {detail} =="));
                         execution.record(ExecutionEvent::ValidationFailed {
                             detail: detail.clone(),
                             at: chrono::Utc::now(),
@@ -517,7 +585,6 @@ pub(crate) async fn run_phase_loop(
                         store.save(execution)?;
                         return Ok(());
                     }
-                    phase_done("== Validate: commands passed ==");
                     command_outcomes = outcome.commands;
                 }
 
@@ -527,7 +594,11 @@ pub(crate) async fn run_phase_loop(
                 // Only *that* this turn happens is hardcoded; what it checks
                 // is the agent's own judgment, never a ksforge command list.
                 let agent_review = if request.validation.agent_review {
-                    phase_start("== Validate: agent reviewing the change ==");
+                    let (tools, permission_mode) = validate_tools_and_permission();
+                    phase_header(
+                        "VALIDATE",
+                        &claude_invocation(&tools, permission_mode, session_id.is_some()),
+                    );
                     let before = workspace::snapshot::hash_tree(working_dir)?;
                     let (system_prompt, user_prompt) = prompt::for_validate(
                         capability,
@@ -536,7 +607,6 @@ pub(crate) async fn run_phase_loop(
                         &understanding,
                         &action,
                     );
-                    let (tools, permission_mode) = validate_tools_and_permission();
                     let turn = run_llm_phase(
                         execution,
                         capability,
@@ -569,7 +639,7 @@ pub(crate) async fn run_phase_loop(
                             .join(", ");
                         let detail =
                             format!("validate must not modify the workspace, but changed: {paths}");
-                        phase_failed(&format!("== Validate: failed — {detail} =="));
+                        phase_fail(&format!("status: failed — {detail}"));
                         execution.record(ExecutionEvent::ValidationFailed {
                             detail: detail.clone(),
                             at: chrono::Utc::now(),
@@ -580,8 +650,8 @@ pub(crate) async fn run_phase_loop(
                         return Ok(());
                     }
 
-                    phase_done(&format!(
-                        "== Validate: done — {} ==",
+                    phase_ok(&format!(
+                        "status: completed — {}",
                         first_line(&outcome.summary)
                     ));
                     Some(AgentValidationReport {
@@ -616,7 +686,7 @@ pub(crate) async fn run_phase_loop(
                 action,
                 validation,
             } => {
-                phase_start("== Report: finalizing ==");
+                phase_header("REPORT", "host-only: ExecutionResult assembled host-side");
                 let result = ExecutionResult {
                     success: true,
                     title: action.title.clone(),
@@ -635,6 +705,7 @@ pub(crate) async fn run_phase_loop(
                 };
                 execution.complete(result);
                 store.save(execution)?;
+                phase_ok(&format!("Execution {} completed", execution.id));
                 return Ok(());
             }
             WorkflowState::Legacy => {

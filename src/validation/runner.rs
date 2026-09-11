@@ -2,6 +2,7 @@ use std::path::Path;
 
 use tokio::process::Command;
 
+use crate::color::{self, Color};
 use crate::domain::{KsforgeError, ValidationCommandOutcome, ValidationOutcome};
 
 const OUTPUT_TAIL_BYTES: usize = 4000;
@@ -18,7 +19,6 @@ pub async fn run(
     let mut all_passed = true;
 
     for command in commands {
-        eprintln!("  running: {command}");
         let mut shell = shell_command(command);
         shell.current_dir(working_dir);
         let output = shell.output().await.map_err(|e| {
@@ -26,10 +26,12 @@ pub async fn run(
         })?;
 
         let passed = output.status.success();
-        eprintln!(
-            "  {} {command}",
-            if passed { "\u{2713}" } else { "\u{2717}" }
-        );
+        let (mark, mark_color) = if passed {
+            ("\u{2713}", Color::Green)
+        } else {
+            ("\u{2717}", Color::Red)
+        };
+        eprintln!("  {} {command}", color::paint(mark, mark_color, true));
         let mut combined = String::from_utf8_lossy(&output.stdout).to_string();
         combined.push_str(&String::from_utf8_lossy(&output.stderr));
         let output_tail = tail(&combined, OUTPUT_TAIL_BYTES);
