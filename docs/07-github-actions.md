@@ -47,20 +47,41 @@ Not needed for `review`/`explain` or any run with `create-pull-request:
 ## If the change might touch `.github/workflows/*`
 
 `permissions: contents: write` is not enough to push a commit that adds or
-modifies a workflow file — GitHub gates that separately. Confirmed against
-a real failure (a change request asking for a new deploy workflow):
+modifies a workflow file — GitHub gates that separately, and (confirmed
+the hard way) there is **no `permissions:` key for it at all**:
 
 ```text
 ! [remote rejected] ksforge/<id> -> ksforge/<id> (refusing to allow a GitHub App
 to create or update workflow `.github/workflows/<name>.yml` without `workflows` permission)
 ```
 
-Add `workflows: write` to the workflow's own `permissions:` block if the
-change requests you expect might ever touch `.github/workflows/*` —
-deliberately not in the default templates here, since it's a meaningfully
-bigger grant (an agent that can edit workflow files can, in principle,
-edit its own future permissions) that should be an opt-in per repository,
-not a default every consumer inherits unasked.
+reads like a `permissions: workflows: write` fix, but adding that key
+breaks the workflow file outright — `Unexpected value 'workflows'`, a
+parse error, worse than the runtime rejection it was meant to fix. The
+scope this error names ("workflow") only exists on a **classic Personal
+Access Token** (or a GitHub App installation with that permission) —
+never on the auto-generated `GITHUB_TOKEN`, regardless of what the
+workflow's own `permissions:` block grants it.
+
+To let a change request actually push a workflow-file change, override
+`actions/checkout`'s `token:` input with such a PAT (checkout persists it
+as the job's git credential, so ksforge's own `git push` picks it up too —
+`gh pr create` itself needs no extra scope, only the push of a commit that
+touches `.github/workflows/*` does):
+
+```yaml
+- uses: actions/checkout@v7
+  with:
+    token: ${{ secrets.WORKFLOW_SCOPED_PAT }}
+```
+
+Deliberately not wired into the default templates here — supplying a PAT
+with this scope is a meaningfully bigger, real grant (a token that can
+edit workflow files can, in principle, edit its own future permissions)
+that should be an opt-in per repository, not a default every consumer
+inherits unasked. Without it, a change request that touches workflow
+files still gets implemented and diffed — only the push (and therefore any
+PR) fails.
 
 ## Primary example: `workflow_dispatch`
 
