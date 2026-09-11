@@ -1,0 +1,57 @@
+name: Change Request to ksforge
+
+# Dogfooding: ksforge accepts change requests against its own repository
+# the same way examples/workflows/change-request-to-ksforge.yml lets any
+# consumer repo do it. Uses @main (not a pinned tag) so this always runs
+# against ksforge's own current action.yml/CLI, not a stale released
+# version — the opened PR still goes through ci.yml (pull_request trigger)
+# before anyone merges it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      change_request:
+        description: 'Change Request als Markdown/Text'
+        required: true
+        type: string
+      capability:
+        description: 'Was ksforge tun soll'
+        required: false
+        type: choice
+        default: implement
+        options:
+          - implement
+          - review
+          - fix
+          - explain
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  forge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Process change request with ksforge
+        uses: chevp/ksforge@main
+        with:
+          change-request: ${{ inputs.change_request }}
+          capability: ${{ inputs.capability }}
+          format: json
+          create-pull-request: "true"
+          base-branch: main
