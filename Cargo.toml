@@ -1,6 +1,6 @@
 [package]
 name = "ksforge"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 description = "Turns change requests into controlled, resumable Claude Code workflows"
 license = "MIT"
