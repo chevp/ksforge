@@ -464,7 +464,7 @@ jobs:
 
       - name: Investigate with ksforge
         id: ksforge
-        uses: chevp/ksforge@v1
+        uses: chevp/ksforge@main
         with:
           change-request: |
             Workflow "${{ github.event.workflow_run.name }}" failed: ${{ github.event.workflow_run.html_url }}

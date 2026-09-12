@@ -2,9 +2,10 @@ name: Diagnose failed workflow
 
 # Ready-to-copy template: paste into <your-repo>/.github/workflows/, set
 # the ANTHROPIC_API_KEY secret, and list the workflow(s) to watch under
-# `on.workflow_run.workflows` below. Pin chevp/ksforge@<tag> to a real
-# release (see GitHub Releases) rather than leaving it at a placeholder
-# version.
+# `on.workflow_run.workflows` below. Uses chevp/ksforge@main to match this
+# workspace's other ksforge workflows (services/ksforge-playground); pin to
+# a released tag instead (see GitHub Releases) if you want reproducible,
+# non-moving runs.
 #
 # Runs `ksforge explain` — read-only, never writes, no PR (see
 # docs/05-capabilities.md) — against the failed run's own logs and the
@@ -68,7 +69,7 @@ jobs:
 
       - name: Investigate with ksforge
         id: ksforge
-        uses: chevp/ksforge@v1
+        uses: chevp/ksforge@main
         with:
           change-request: ${{ steps.request.outputs.text }}
           capability: explain
