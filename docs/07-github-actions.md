@@ -2,6 +2,9 @@
 
 Ready-to-copy template for the primary flow below:
 [examples/workflows/change-request-to-ksforge.yml](../examples/workflows/change-request-to-ksforge.yml).
+For the auto-diagnose-on-failure flow, see
+[examples/workflows/diagnose-on-failure.yml](../examples/workflows/diagnose-on-failure.yml)
+and the section below of the same name.
 
 You do **not** need your own "configure git identity" step for
 `--create-pull-request`/`--push-to-branch` to work — `git commit` needs
@@ -422,6 +425,97 @@ second one — see [`github::pull_request::push_follow_up`], and
 matters more than it does for `/ksforge choose`: this starts a brand new,
 write-capable, billed run from arbitrary comment text, not a pick among
 options the agent already offered.
+
+## Auto-diagnose on workflow failure
+
+`workflow_run` lets a separate workflow react whenever another one (e.g.
+`CI`) finishes, so a failure can be investigated automatically instead of
+waiting for someone to open the failed run:
+
+```yaml
+name: Diagnose failed workflow
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+jobs:
+  diagnose:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RUN_URL: ${{ github.event.workflow_run.html_url }}
+      WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Fetch the failed run's logs
+        run: gh run view ${{ github.event.workflow_run.id }} --log-failed > /tmp/failed-log.txt
+
+      - name: Investigate with ksforge
+        id: ksforge
+        uses: chevp/ksforge@v1
+        with:
+          change-request: |
+            Workflow "${{ github.event.workflow_run.name }}" failed: ${{ github.event.workflow_run.html_url }}
+            Investigate against the current source and state the most likely root cause. Do not fix it.
+          capability: explain
+          create-pull-request: "false"
+          format: json
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Write the probable cause to the workflow log, and open an issue
+        env:
+          SUMMARY: ${{ steps.ksforge.outputs.summary }}
+        run: |
+          echo "::error::Probable cause of failure in \"$WORKFLOW_NAME\" ($RUN_URL):"
+          printf '%s\n' "$SUMMARY"
+          gh issue create --title "$WORKFLOW_NAME failed: $RUN_URL" \
+            --body "$(printf 'Probable cause:\n\n%s' "$SUMMARY")"
+```
+
+Full version, with the log trimmed to a bounded size and the issue body
+written to a file (`--body-file`) rather than passed inline:
+[examples/workflows/diagnose-on-failure.yml](../examples/workflows/diagnose-on-failure.yml).
+
+Three things make this the right capability/permission choice, not just a
+convenient one:
+
+- **`capability: explain`, not `fix`.** `explain` is read-only
+  (`Read,Grep,Glob` only, no ACT-phase writes — see
+  [05-capabilities.md](05-capabilities.md)) and never offers the
+  human-in-the-loop protocol, so there is nothing for it to do but name a
+  cause — matching "formulate a possible cause, without solving it". Point
+  it at `fix` instead only if you actually want it to attempt a change.
+- **`create-pull-request: "false"` and `permissions: contents: read`.**
+  This workflow only investigates; it has no business writing to the
+  repository, so it isn't given the ability to.
+- **The `::error::` annotation is the log-visible finding; the issue is
+  the durable one.** The annotation surfaces the cause right on the failed
+  run without requiring anyone to open anything else; `gh issue create`
+  keeps it discoverable after the run's own log has expired, and gives it
+  a place for follow-up discussion the log itself can't hold.
+
+`workflow_run` only fires for a workflow file version that exists on the
+default branch (a repo-wide gate GitHub applies to this trigger, not
+something ksforge or this template control), so a **new** `diagnose:` job
+added on a feature branch won't run against a failure on that same branch
+until it merges. `SUMMARY`/`RUN_URL`/`WORKFLOW_NAME` go through `env:`
+here rather than being interpolated directly into the shell script, for
+the same reason [action.yml](../action.yml) does it for `change-request`:
+model-generated or event-supplied text can contain characters a shell
+would otherwise parse.
 
 ## Inputs / outputs
 

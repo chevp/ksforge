@@ -1,0 +1,103 @@
+name: Diagnose failed workflow
+
+# Ready-to-copy template: paste into <your-repo>/.github/workflows/, set
+# the ANTHROPIC_API_KEY secret, and list the workflow(s) to watch under
+# `on.workflow_run.workflows` below. Pin chevp/ksforge@<tag> to a real
+# release (see GitHub Releases) rather than leaving it at a placeholder
+# version.
+#
+# Runs `ksforge explain` — read-only, never writes, no PR (see
+# docs/05-capabilities.md) — against the failed run's own logs and the
+# current source, to name a probable root cause without attempting a fix.
+# The finding goes to two places: the job's own log (an `::error::`
+# annotation, visible on the failed run itself) and a new GitHub issue
+# (so it survives after the log is gone). `create-pull-request` is
+# deliberately left "false" here — this workflow only investigates, it
+# never changes code. See docs/07-github-actions.md, "Auto-diagnose on
+# workflow failure".
+
+on:
+  workflow_run:
+    workflows:
+      - "CI"
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+jobs:
+  diagnose:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RUN_ID: ${{ github.event.workflow_run.id }}
+      RUN_URL: ${{ github.event.workflow_run.html_url }}
+      WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+    steps:
+      - name: Checkout the failed run's commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Fetch the failed run's logs
+        run: |
+          set -euo pipefail
+          gh run view "$RUN_ID" --log-failed > /tmp/failed-log.txt || true
+          # Log lines can be arbitrarily long; keep the change request itself bounded.
+          tail -c 20000 /tmp/failed-log.txt > /tmp/failed-log-trimmed.txt
+
+      - name: Build the change request
+        id: request
+        run: |
+          {
+            echo 'text<<KSFORGE_CHANGE_REQUEST_EOF'
+            echo "Workflow \"$WORKFLOW_NAME\" failed: $RUN_URL"
+            echo
+            echo "Investigate the failure log below against the current source code and"
+            echo "state the most likely root cause. Do not attempt to fix it."
+            echo
+            echo '```'
+            cat /tmp/failed-log-trimmed.txt
+            echo '```'
+            echo 'KSFORGE_CHANGE_REQUEST_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Investigate with ksforge
+        id: ksforge
+        uses: chevp/ksforge@v1
+        with:
+          change-request: ${{ steps.request.outputs.text }}
+          capability: explain
+          create-pull-request: "false"
+          format: json
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Write the probable cause to the workflow log
+        env:
+          SUMMARY: ${{ steps.ksforge.outputs.summary }}
+        run: |
+          echo "::error::Probable cause of failure in \"$WORKFLOW_NAME\" ($RUN_URL):"
+          printf '%s\n' "$SUMMARY"
+
+      - name: Open a GitHub issue with the finding
+        env:
+          SUMMARY: ${{ steps.ksforge.outputs.summary }}
+        run: |
+          {
+            echo "Automated diagnosis by \`ksforge explain\` (read-only — no fix attempted)."
+            echo
+            echo "**Failed run:** $RUN_URL"
+            echo
+            echo "**Probable cause:**"
+            echo
+            printf '%s\n' "$SUMMARY"
+          } > /tmp/issue-body.md
+          gh issue create \
+            --title "$WORKFLOW_NAME failed: $RUN_URL" \
+            --label "ci-failure" \
+            --body-file /tmp/issue-body.md
