@@ -53,7 +53,7 @@ See [docs/02-quickstart.md](docs/02-quickstart.md).
 ```
 
 Ready-to-copy template:
-[examples/workflows/change-request-to-ksforge.yml](examples/workflows/change-request-to-ksforge.yml).
+[examples/github-workflows/change-request-to-ksforge.yml](examples/github-workflows/change-request-to-ksforge.yml).
 See [docs/07-github-actions.md](docs/07-github-actions.md), including the
 resumable two-run pattern for when Claude Code needs a decision mid-run.
 

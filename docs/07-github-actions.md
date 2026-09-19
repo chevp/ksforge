@@ -1,9 +1,9 @@
 # GitHub Actions
 
 Ready-to-copy template for the primary flow below:
-[examples/workflows/change-request-to-ksforge.yml](../examples/workflows/change-request-to-ksforge.yml).
+[examples/github-workflows/change-request-to-ksforge.yml](../examples/github-workflows/change-request-to-ksforge.yml).
 For the auto-diagnose-on-failure flow, see
-[examples/workflows/diagnose-on-failure.yml](../examples/workflows/diagnose-on-failure.yml)
+[examples/github-workflows/diagnose-on-failure.yml](../examples/github-workflows/diagnose-on-failure.yml)
 and the section below of the same name.
 
 You do **not** need your own "configure git identity" step for
@@ -487,7 +487,7 @@ jobs:
 
 Full version, with the log trimmed to a bounded size and the issue body
 written to a file (`--body-file`) rather than passed inline:
-[examples/workflows/diagnose-on-failure.yml](../examples/workflows/diagnose-on-failure.yml).
+[examples/github-workflows/diagnose-on-failure.yml](../examples/github-workflows/diagnose-on-failure.yml).
 
 Three things make this the right capability/permission choice, not just a
 convenient one:
