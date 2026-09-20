@@ -94,6 +94,7 @@ capability commands below.
 | `--base-branch <name>` | `main` | Base branch for `--create-pull-request`. |
 | `--push-to-branch` | off | Commits and pushes to the already-checked-out branch instead of opening a new PR — for a comment-driven follow-up run against an existing PR's branch. Conflicts with `--create-pull-request`. |
 | `--mcp-config <path>` | none | Passed through to Claude Code as `--mcp-config <path> --strict-mcp-config` — see [11-integrations.md](11-integrations.md). |
+| `--handoff-session <url>` | none | Also settable via `KSFORGE_HANDOFF_ROUTINE_URL`. Fire URL of a claude.ai routine; on a non-interactive `waiting_for_human` pause, the open gate is handed to a claude.ai/code session a human can answer conversationally. Needs `KSFORGE_HANDOFF_TOKEN`. Additive — see [06-human-in-the-loop.md](06-human-in-the-loop.md). |
 
 ## Waiting for human input: console vs. CI
 
@@ -115,6 +116,11 @@ stdin *and* stdout are both real terminals
   [06-human-in-the-loop.md](06-human-in-the-loop.md) and
   [07-github-actions.md](07-github-actions.md) for that round trip).
 
+`--handoff-session` adds a third answer channel to that second case only:
+the gate is also opened as a claude.ai/code session so a human can talk it
+through instead of picking an option id blind. It changes nothing else —
+same exit `6`, same open gate, same `ksforge resume`.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -135,6 +141,7 @@ stdin *and* stdout are both real terminals
   "capability": "implement",
   "status": "completed",
   "pending_question": null,
+  "handoff_session_url": null,
   "result": {
     "success": true,
     "title": "Add password reset via email",

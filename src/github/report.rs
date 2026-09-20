@@ -53,6 +53,14 @@ fn render_waiting(execution: &Execution) -> String {
         s.push_str(&format!("   `/ksforge choose {}`\n\n", option.id));
     }
 
+    if let Some(url) = &execution.handoff_session_url {
+        s.push_str("### Or answer it conversationally\n\n");
+        s.push_str(&format!(
+            "This decision is also open in a Claude Code session — talk it through there \
+             instead of picking an option blind: [{url}]({url})\n\n"
+        ));
+    }
+
     s.push_str("### What happens next\n\n");
     s.push_str(
         "After a decision is received, ksforge will resume this execution, provide the \
@@ -268,6 +276,33 @@ mod tests {
         assert!(body.contains("**OAuth 2**"));
         assert!(body.contains("/ksforge choose oauth2"));
         assert!(body.contains("/ksforge choose jwt"));
+        assert!(body.contains("WAITING_FOR_HUMAN"));
+    }
+
+    #[test]
+    fn waiting_report_links_a_handed_off_session_when_there_is_one() {
+        let mut exec = Execution::start(change_request(), "implement");
+        exec.ask(
+            "OAuth2 or JWT?".into(),
+            vec![DecisionOption {
+                id: "oauth2".into(),
+                label: "OAuth 2".into(),
+            }],
+            None,
+            String::new(),
+            Vec::new(),
+        );
+
+        assert!(
+            !render(&exec).contains("answer it conversationally"),
+            "no handoff configured: the section must not appear"
+        );
+
+        exec.record_handoff("https://claude.ai/code/session_01H");
+        let body = render(&exec);
+        assert!(body.contains("https://claude.ai/code/session_01H"));
+        // The handoff is additive — the option commands must survive it.
+        assert!(body.contains("/ksforge choose oauth2"));
         assert!(body.contains("WAITING_FOR_HUMAN"));
     }
 

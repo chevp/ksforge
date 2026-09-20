@@ -151,6 +151,14 @@ pub enum ExecutionEvent {
         question: String,
         at: DateTime<Utc>,
     },
+    /// A paused gate was handed to a Claude Code cloud session so a human
+    /// can answer it conversationally (`--handoff-session`, see
+    /// `crate::handoff`). Additive: the gate stays open and `resume` still
+    /// applies, so this is never a terminal event.
+    HandoffOpened {
+        session_url: String,
+        at: DateTime<Utc>,
+    },
     HumanDecided {
         option: String,
         #[serde(default)]
@@ -275,6 +283,12 @@ pub struct Execution {
     /// available. `None` when the executor did not report one (e.g. a mock
     /// executor in tests) or resume-by-session is not applicable.
     pub agent_session_id: Option<String>,
+    /// URL of the claude.ai/code session opened for this execution's gate
+    /// by `--handoff-session`. `None` when no handoff was configured or the
+    /// run never paused. `#[serde(default)]` so executions persisted before
+    /// this field existed still load.
+    #[serde(default)]
+    pub handoff_session_url: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -296,6 +310,7 @@ impl Execution {
             gates: Vec::new(),
             result: None,
             agent_session_id: None,
+            handoff_session_url: None,
             created_at: now,
             updated_at: now,
         };
@@ -356,6 +371,20 @@ impl Execution {
     /// addresses a `GateId`, not just "the execution").
     pub fn open_gate(&self) -> Option<&HumanDecisionRequest> {
         self.pending_question.as_ref()
+    }
+
+    /// Attach a handed-off cloud session to this execution. Does not touch
+    /// `status` or `pending_question`: the gate is still open and still
+    /// resumable by `ksforge resume`, which is the whole point — the cloud
+    /// session is somewhere to hold the conversation, not a second state
+    /// machine (docs/06-human-in-the-loop.md).
+    pub fn record_handoff(&mut self, session_url: impl Into<String>) {
+        let session_url = session_url.into();
+        self.record(ExecutionEvent::HandoffOpened {
+            session_url: session_url.clone(),
+            at: Utc::now(),
+        });
+        self.handoff_session_url = Some(session_url);
     }
 
     pub fn apply_decision(&mut self, decision: &HumanDecision) {
@@ -497,6 +526,45 @@ mod tests {
         );
         assert_eq!(exec.gates.len(), 2, "each ask() appends a new gate");
         assert_ne!(exec.gates[0].id, exec.gates[1].id);
+    }
+
+    #[test]
+    fn a_handoff_leaves_the_gate_open_and_resumable() {
+        let change_request = ChangeRequest::from_text("As a user...").unwrap();
+        let mut exec = Execution::start(change_request, "implement");
+        exec.ask(
+            "OAuth2 or JWT?".into(),
+            vec![DecisionOption {
+                id: "oauth2".into(),
+                label: "OAuth 2".into(),
+            }],
+            None,
+            String::new(),
+            Vec::new(),
+        );
+
+        exec.record_handoff("https://claude.ai/code/session_01H");
+
+        assert_eq!(exec.status, ExecutionStatus::WaitingForHuman);
+        assert!(exec.open_gate().is_some(), "the gate must stay open");
+        assert_eq!(
+            exec.handoff_session_url.as_deref(),
+            Some("https://claude.ai/code/session_01H")
+        );
+        assert!(
+            exec.messages
+                .iter()
+                .any(|e| matches!(e, ExecutionEvent::HandoffOpened { .. })),
+            "the handoff is recorded on the event log"
+        );
+
+        // ...and resuming still works exactly as it did without a handoff.
+        exec.apply_decision(&HumanDecision {
+            execution_id: exec.id.clone(),
+            option: "oauth2".into(),
+            decided_by: None,
+        });
+        assert_eq!(exec.status, ExecutionStatus::Running);
     }
 
     #[test]
