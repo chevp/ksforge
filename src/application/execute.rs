@@ -453,6 +453,16 @@ pub(crate) async fn run_phase_loop(
                 located,
             } => {
                 let (tools, permission_mode) = tools_and_permission(capability.tool_policy());
+                // ACT starts a fresh session instead of `--resume`ing the
+                // read-only UNDERSTAND/LOCATE one. Confirmed against a real
+                // run: a resumed ACT turn still believed it was in the
+                // read-only UNDERSTAND phase and made no edits at all. The
+                // prompt restates every earlier phase's output explicitly
+                // (see `prompt::for_act`), so nothing is lost. A resume after
+                // a pause *inside* ACT still continues ACT's own session.
+                if decision_suffix.is_none() {
+                    *session_id = None;
+                }
                 phase_header(
                     "ACT",
                     &claude_invocation(&tools, permission_mode, session_id.is_some()),

@@ -285,6 +285,40 @@ async fn understand_and_locate_are_always_read_only_even_for_a_write_capability(
     assert!(requests[2].tools.is_empty());
 }
 
+/// ACT must not `--resume` the read-only UNDERSTAND/LOCATE session: a real
+/// resumed ACT turn believed it was still in UNDERSTAND and made no edits.
+/// LOCATE still continues UNDERSTAND's session.
+#[tokio::test]
+async fn act_starts_a_fresh_session_instead_of_resuming_the_read_only_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let executor = Arc::new(MockAgentExecutor::with_responses(vec![
+        understand_ok(),
+        locate_ok(),
+        json!({ "status": "completed", "summary": "No changes needed.", "changed_files": [] }),
+    ]));
+    let captured = executor.requests();
+    let context = ExecutionContext {
+        executor,
+        workspace_root: dir.path().to_path_buf(),
+        model: None,
+        max_budget_usd: None,
+        dry_run: false,
+        mcp_config: None,
+    };
+
+    let execution = Implement
+        .execute(request(dir.path()), context)
+        .await
+        .unwrap();
+    assert_eq!(execution.status, ExecutionStatus::Completed);
+
+    let requests = captured.lock().unwrap();
+    assert_eq!(requests.len(), 3);
+    assert_eq!(requests[0].resume_session_id, None);
+    assert_eq!(requests[1].resume_session_id.as_deref(), Some("mock-session"));
+    assert_eq!(requests[2].resume_session_id, None, "ACT must not resume");
+}
+
 /// A malformed/schema-non-conforming phase response fails the execution
 /// rather than being coerced or silently accepted into the next
 /// `WorkflowState` — and does so after exactly one call to the executor for
