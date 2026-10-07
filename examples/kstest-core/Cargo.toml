@@ -3,7 +3,7 @@ name = "kstest-core"
 version = "0.1.0"
 edition = "2024"
 description = "Example: a continuously running, event-driven runtime controlled by an explicit state machine"
-license = "MIT"
+license = "Apache-2.0"
 publish = false
 
 [dependencies]
