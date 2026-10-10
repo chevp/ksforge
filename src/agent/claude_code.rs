@@ -87,8 +87,17 @@ impl ClaudeCodeExecutor {
             // only for sandboxes with no internet access" — too broad for
             // ksforge's typical CI runner, which does have internet
             // access).
-            cmd.arg("--allowedTools").arg("Bash,PowerShell");
+            cmd.args(shell_args(std::env::var_os("KSFORGE_NO_SHELL").is_some_and(|v| v == "1")));
         }
+    }
+}
+
+/// Shell tools pre-approved (default) or denied (`KSFORGE_NO_SHELL=1`, for unattended runs that must not run commands).
+fn shell_args(no_shell: bool) -> [&'static str; 2] {
+    if no_shell {
+        ["--disallowedTools", "Bash,PowerShell"]
+    } else {
+        ["--allowedTools", "Bash,PowerShell"]
     }
 }
 
@@ -435,6 +444,12 @@ fn resolve_windows_shim(path: PathBuf) -> PathBuf {
 #[cfg(test)]
 mod permission_args_tests {
     use super::*;
+
+    #[test]
+    fn no_shell_denies_instead_of_allowing() {
+        assert_eq!(shell_args(false), ["--allowedTools", "Bash,PowerShell"]);
+        assert_eq!(shell_args(true), ["--disallowedTools", "Bash,PowerShell"]);
+    }
 
     fn request(permission_mode: PermissionMode) -> AgentRequest {
         AgentRequest {
